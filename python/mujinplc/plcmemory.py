@@ -2,6 +2,7 @@
 
 import threading
 import weakref
+import typing
 
 import logging
 log = logging.getLogger(__name__)
@@ -11,16 +12,16 @@ class PLCMemory:
     PLCMemory is a key-value store that supports locked PLC memory read write operations.
     """
 
-    _lock = None
-    _entries = None
-    _observers = None
+    _lock = None # type: threading.Lock
+    _entries = None # type: typing.Dict
+    _observers = None # type: typing.Set[typing.Any]
 
     def __init__(self):
         self._lock = threading.Lock()
         self._entries = {}
         self._observers = weakref.WeakSet()
 
-    def Read(self, keys):
+    def Read(self, keys: typing.Iterable[str]) -> typing.Mapping[str, typing.Any]:
         """
         Atomically read PLC memory.
 
@@ -34,7 +35,7 @@ class PLCMemory:
                     keyvalues[key] = self._entries[key]
         return keyvalues
 
-    def Write(self, keyvalues):
+    def Write(self, keyvalues: typing.Mapping[str, typing.Any]) -> None:
         """
         Atomically write PLC memory.
 
@@ -57,7 +58,7 @@ class PLCMemory:
             for observer in observers:
                 observer.MemoryModified(modifications)
 
-    def AddObserver(self, observer):
+    def AddObserver(self, observer: typing.Any) -> None:
         modifications = None
         with self._lock:
             self._observers.add(observer)

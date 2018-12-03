@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 
+import typing
 import enum
+
+from . import plccontroller
 
 class PLCWaitTimeout(Exception):
     pass
@@ -34,20 +37,20 @@ class PLCError(Exception):
     PLCError is raised when an error code is set by MUJIN controller.
     """
 
-    _errorCode = None
-    _errorDetail = None
+    _errorCode = None # type: PLCErrorCode
+    _errorDetail = None # type: str
 
-    def __init__(self, errorCode=PLCErrorCode.GenericError, errorDetail=''):
+    def __init__(self, errorCode: PLCErrorCode = PLCErrorCode.GenericError, errorDetail: str = ''):
         self._errorCode = errorCode
         self._errorDetail = errorDetail
 
-    def GetErrorCode(self):
+    def GetErrorCode(self) -> PLCErrorCode:
         """
         MUJIN PLC Error Code
         """
         return self._errorCode
 
-    def GetErrorDetail(self):
+    def GetErrorDetail(self) -> str:
         """
         When ErrorCode is RobotError, ErrorDetail contains the error code returned by robot controller.
         """
@@ -108,17 +111,30 @@ class PackComputationFinishCode(enum.Enum):
     FinishedBadOrderCyclePrecondition = 0xfffe
     FinishedPackingError = 0xffff
 
+class PLCStartOrderCycleParameters:
+    partType = '' # type: str # type of the product to be picked, for example: "cola"
+    orderNumber = 0 # type: int # number of items to be picked, for example: 1
+    robotId = 0 # type: int # set to 1
+
+    pickLocationIndex = 0 # type: int # index of location for source container, location defined on mujin pendant
+    pickContainerId = '' # type: str # barcode of the source container, for example: "010023"
+    pickContainerType = '' # type: str # type of the source container, if all the same, set to ""
+
+    placeLocationIndex = 0 # type: int # index of location for dest container, location defined on mujin pendant
+    placeContainerId = '' # type: str # barcode of the dest contianer, for example: "pallet1"
+    placeContainerType = '' # type: str # type of the source container, if all the same, set to ""
+
 class PLCLogic:
     """
     MUJIN specific PLC logic implementation.
     """
 
-    _controller = None # an instance of PLCController
+    _controller = None # type: plccontroller.PLCController # an instance of PLCController
 
-    def __init__(self, controller):
+    def __init__(self, controller: plccontroller.PLCController):
         self._controller = controller
 
-    def ClearAllSignals(self):
+    def ClearAllSignals(self) -> None:
         """
         Clear all signals to the MUJIN controller. Set them all to false.
         """
@@ -135,19 +151,20 @@ class PLCLogic:
             'resetError': False,
         })
 
-    def WaitUntilConnected(self, timeout=None):
+    def WaitUntilConnected(self, timeout: typing.Optional[float] = None) -> None:
         """
         Block until connection from MUJIN controller is detected.
         """
-        return self._controller.WaitUntilConnected(timeout=timeout)
+        if not self._controller.WaitUntilConnected(timeout=timeout):
+            raise PLCWaitTimeout()
 
-    def IsError(self):
+    def IsError(self) -> bool:
         """
         Whether MUJIN controller is in error.
         """
         return self._controller.GetBoolean('isError')
 
-    def CheckError(self):
+    def CheckError(self) -> None:
         """
         Check if there is an error set by MUJIN controller in the current state. If so, raise a PLCError exception. 
         """
@@ -156,7 +173,7 @@ class PLCLogic:
             errorDetail = self._controller.GetString('detailedErrorCode')
             raise PLCError(errorCode, errorDetail)
 
-    def ResetError(self, timeout=None):
+    def ResetError(self, timeout: typing.Optional[float] = None) -> None:
         """
         Reset error on MUJIN controller. Block until error is reset.
         """
@@ -167,11 +184,11 @@ class PLCLogic:
         finally:
             self._controller.Set('resetError', False)
 
-    def WaitUntilOrderCycleReady(self, timeout=None):
+    def WaitUntilOrderCycleReady(self, timeout: typing.Optional[float] = None) -> None:
         """
         Block until MUJIN controller is ready to start order cycle.
         """
-        if not self._controller.WaitUntil({
+        if not self._controller.WaitUntilAll({
             'isRunningOrderCycle': False,
             'isRobotMoving': False,
             'isModeAuto': True,
@@ -183,58 +200,56 @@ class PLCLogic:
             raise PLCWaitTimeout()
         self.CheckError()
 
-    def StartOrderCycle(self, startOrderCycleParameters, timeout=None):
+    def StartOrderCycle(self, startOrderCycleParameters: PLCStartOrderCycleParameters, timeout: typing.Optional[float] = None) -> None:
         """
         Start order cycle. Block until MUJIN controller acknowledge the start command.
         """
         pass
 
-    def GetOrderCycleStatus(self):
+    def GetOrderCycleStatus(self) -> None:
         """
         Gather order cycle status information in the current state.
         """
         pass
 
-    def WaitForOrderCycleStatusChange(self, timeout=None):
+    def WaitForOrderCycleStatusChange(self, timeout: typing.Optional[float] = None) -> None:
         """
         Block until values in order cycle status changes.
         """
         pass
 
-    def WaitUntilOrderCycleFinish(self, timeout=None):
+    def WaitUntilOrderCycleFinish(self, timeout: typing.Optional[float] = None) -> None:
         """
         Block until MUJIN controller finishes the order cycle.
         """
         pass
 
-    def StopOrderCycle(self, timeout=None):
+    def StopOrderCycle(self, timeout: typing.Optional[float] = None) -> None:
         """
         Signal MUJIN controller to stop order cycle and block until it is stopped.
         """
         pass
 
-    def StopImmediately(self, timeout=None):
+    def StopImmediately(self, timeout: typing.Optional[float] = None) -> None:
         """
         Stop the current operation on MUJIN controller immediately.
         """
         pass
 
-    def WaitUntilMoveToHomeReady(self, timeout=None):
+    def WaitUntilMoveToHomeReady(self, timeout: typing.Optional[float] = None) -> None:
         """
         Block until MUJIN controller is ready to move robot to home position.
         """
         pass
 
-    def StartMoveToHome(self, timeout=None):
+    def StartMoveToHome(self, timeout: typing.Optional[float] = None) -> None:
         """
         Signal MUJIN controller to move the robot to its home position. Block until the robot starts moving.
         """
         pass
 
-    def WaitUntilRobotMoving(self, timeout=None):
+    def WaitUntilRobotMoving(self, timeout: typing.Optional[float] = None) -> None:
         """
         Block until the robot moving state is expected.
         """
         pass
-
-    

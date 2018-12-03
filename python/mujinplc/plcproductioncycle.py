@@ -31,20 +31,20 @@ class PLCQueueOrderParameters:
     Struct describing order data
     """
 
-    partType = '' # type of the product to be picked, for example: "cola"
-    orderNumber = 0 # number of items to be picked, for example: 1
-    robotId = 0 # set to 1
+    partType = '' # type: str # type of the product to be picked, for example: "cola"
+    orderNumber = 0 # type: int # number of items to be picked, for example: 1
+    robotId = 0 # type: int # set to 1
 
-    pickLocationIndex = 0 # index of location for source container, location defined on mujin pendant
-    pickContainerId = '' # barcode of the source container, for example: "010023"
-    pickContainerType = '' # type of the source container, if all the same, set to ""
+    pickLocationIndex = 0 # type: int # index of location for source container, location defined on mujin pendant
+    pickContainerId = '' # type: str # barcode of the source container, for example: "010023"
+    pickContainerType = '' # type: str # type of the source container, if all the same, set to ""
 
-    placeLocationIndex = 0 # index of location for dest container, location defined on mujin pendant
-    placeContainerId = '' # barcode of the dest contianer, for example: "pallet1"
-    placeContainerType = '' # type of the source container, if all the same, set to ""
+    placeLocationIndex = 0 # type: int # index of location for dest container, location defined on mujin pendant
+    placeContainerId = '' # type: str # barcode of the dest contianer, for example: "pallet1"
+    placeContainerType = '' # type: str # type of the source container, if all the same, set to ""
 
-    packInputPartIndex = 0 # when using packFormation, index of the part in the pack
-    packFormationComputationName = '' # when using packFormation, name of the formation
+    packInputPartIndex = 0 # type: int # when using packFormation, index of the part in the pack
+    packFormationComputationName = '' # type: str # when using packFormation, name of the formation
 
 class PLCProductionCycle:
     """
@@ -52,9 +52,11 @@ class PLCProductionCycle:
     """
 
     _memory = None # an instance of PLCMemory
+    _materialHandler = None # an instance of PLCMaterialHandler, supplied by customer
 
     def __init__(self, memory: plcmemory.PLCMemory, materialHandler: PLCMaterialHandler):
         self._memory = memory
+        self._materialHandler = materialHandler
 
     def QueueOrder(self, orderUniqueId: str, queueOrderParameters: PLCQueueOrderParameters) -> None:
         pass

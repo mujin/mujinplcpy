@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import time
-import zmq
 import threading
+import typing
+import zmq
+
+from . import plcmemory
 
 import logging
 log = logging.getLogger(__name__)
@@ -57,13 +60,13 @@ class PLCServer:
     A ZMQ server that hosts the PLC controller.
     """
 
-    _memory = None # an instance of PLCMemory
-    _endpoint = None # listening endpoint to bind to
-    _ctx = None # zmq context
-    _thread = None # server thread
-    _isok = False # signal that the server thread should continue to run
+    _memory = None # type: plcmemory.PLCMemory # an instance of PLCMemory
+    _endpoint = None # type: str # listening endpoint to bind to
+    _ctx = None # type: typing.Any # zmq context
+    _thread = None # type: typing.Optional[threading.Thread] # server thread
+    _isok = False # type: bool # signal that the server thread should continue to run
 
-    def __init__(self, memory, endpoint, ctx=None):
+    def __init__(self, memory: plcmemory.PLCMemory, endpoint: str, ctx: typing.Any = None):
         self._memory = memory
         self._endpoint = endpoint
         self._ctx = ctx
@@ -72,7 +75,7 @@ class PLCServer:
     def __del__(self):
         self.Stop()
 
-    def Start(self):
+    def Start(self) -> None:
         """
         Start the PLC server on a background thread.
         """
@@ -82,16 +85,16 @@ class PLCServer:
         self._thread = threading.Thread(target=self._RunThread, name='plcserver')
         self._thread.start()
 
-    def IsRunning(self):
+    def IsRunning(self) -> bool:
         """
         Whether ZMQ server is currently running.
         """
         return self._isok
 
-    def SetStop(self):
+    def SetStop(self) -> None:
         self._isok = False
 
-    def Stop(self):
+    def Stop(self) -> None:
         """
         Stop the PLC server. Will block until the background thread teminates.
         """
@@ -100,7 +103,7 @@ class PLCServer:
             self._thread.join()
             self._thread = None
 
-    def _RunThread(self):
+    def _RunThread(self) -> None:
         socket = None # zmq socket for use in this thread
 
         while self._isok:

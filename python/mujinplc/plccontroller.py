@@ -2,24 +2,27 @@
 
 import threading
 import time
+import typing
+
+from . import plcmemory
 
 import logging
 log = logging.getLogger(__name__)
 
 class PLCController:
 
-    _memory = None # an instance of PLCMemory
-    _state = None # current state which is a snapshot of the PLCMemory in time, _state is intentionally not protected by lock
+    _memory = None # type: plcmemory.PLCMemory # an instance of PLCMemory
+    _state = None # type: typing.Dict[str, typing.Any] # current state which is a snapshot of the PLCMemory in time, _state is intentionally not protected by lock
 
-    _queue = None # incoming modifications queue
-    _lock = None # protects _queue
-    _condition = None # condition variable for _queue
+    _queue = None # type: typing.List[typing.Mapping[str, typing.Any]] # incoming modifications queue
+    _lock = None # type: threading.Lock # protects _queue
+    _condition = None # type: threading.Condition # condition variable for _queue
 
-    _maxHeartbeatInterval = None # if heartbeat has not been received in this interval, connection is considered to be lost
-    _heartbeatSignal = None # name of the heartbeat signal that is changed contantly
-    _lastHeartbeat = None # timestamp of the last heartbeat
+    _maxHeartbeatInterval = None # type: typing.Optional[int] # if heartbeat has not been received in this interval, connection is considered to be lost
+    _heartbeatSignal = None # type typing.Optional[str] # name of the heartbeat signal that is changed contantly
+    _lastHeartbeat = None # type typing.Optional[int] # timestamp of the last heartbeat
 
-    def __init__(self, memory, maxHeartbeatInterval=None, heartbeatSignal=None):
+    def __init__(self, memory: plcmemory.PLCMemory, maxHeartbeatInterval: typing.Optional[int] = None, heartbeatSignal: typing.Optional[str] = None):
         self._memory = memory
         self._state = {}
 
@@ -32,10 +35,10 @@ class PLCController:
 
         self._memory.AddObserver(self)
 
-    def MemoryModified(self, modifications):
+    def MemoryModified(self, modifications: typing.Optional[typing.Mapping[str, typing.Any]]) -> None:
         self._Enqueue(modifications)
 
-    def _Enqueue(self, modifications):
+    def _Enqueue(self, modifications: typing.Optional[typing.Mapping[str, typing.Any]]) -> None:
         if not modifications:
             return
         if not self._heartbeatSignal or self._heartbeatSignal in modifications:
@@ -44,7 +47,7 @@ class PLCController:
             self._queue.append(modifications)
             self._condition.notify()
 
-    def _Dequeue(self, timeout=None, timeoutOnDisconnect=True):
+    def _Dequeue(self, timeout: typing.Optional[float] = None, timeoutOnDisconnect: bool = True) -> typing.Optional[typing.Mapping[str, typing.Any]]:
         start = time.monotonic()
         modifications = None
 
@@ -69,21 +72,21 @@ class PLCController:
         self._state.update(modifications)
         return modifications
 
-    def _DequeueAll(self):
-        modifications = {}
+    def _DequeueAll(self) -> None:
+        modifications = {} # type: typing.Dict[str, typing.Any]
         with self._lock:
             for keyvalues in self._queue:
                 modifications.update(keyvalues)
             self._queue = []
         self._state.update(modifications)
 
-    def Sync(self):
+    def Sync(self) -> None:
         """
         Synchronize the local memory snapshot with what has happened already.
         """
         self._DequeueAll()
 
-    def IsConnected(self):
+    def IsConnected(self) -> bool:
         """
         Whether time since last heartbeat is within expectation indicating an active connection.
         """
@@ -91,7 +94,7 @@ class PLCController:
             return self._lastHeartbeat is not None and time.monotonic() - self._lastHeartbeat < self._maxHeartbeatInterval
         return True
 
-    def WaitUntilConnected(self, timeout=None):
+    def WaitUntilConnected(self, timeout: typing.Optional[float] = None) -> bool:
         """
         Wait until IsConnected becomes true.
 
@@ -105,7 +108,7 @@ class PLCController:
                 timeout -= time.monotonic() - start
         return True
 
-    def WaitFor(self, key, value, timeout=None):
+    def WaitFor(self, key: str, value: typing.Any, timeout: typing.Optional[float] = None) -> bool:
         """
         Wait for a key to change to a particular value.
 
@@ -115,7 +118,7 @@ class PLCController:
         """
         return self.WaitForAny({key: value}, timeout=timeout)
 
-    def WaitForAny(self, keyvalues, timeout=None):
+    def WaitForAny(self, keyvalues: typing.Mapping[str, typing.Any], timeout: typing.Optional[float] = None) -> bool:
         """
         Wait for multiple keys, return as soon as any one key has the expected value.
 
@@ -138,7 +141,7 @@ class PLCController:
             if timeout is not None:
                 timeout -= time.monotonic() - start
 
-    def WaitUntil(self, key, value, timeout=None):
+    def WaitUntil(self, key: str, value: typing.Any, timeout: typing.Optional[float] = None) -> bool:
         """
         Wait until a key is at the expected value.
 
@@ -148,7 +151,7 @@ class PLCController:
         """
         return self.WaitUntilAll({key: value}, timeout=timeout)
 
-    def WaitUntilAll(self, expectations=None, exceptions=None, timeout=None):
+    def WaitUntilAll(self, expectations: typing.Optional[typing.Mapping[str, typing.Any]] = None, exceptions: typing.Optional[typing.Mapping[str, typing.Any]] = None, timeout: typing.Optional[float] = None) -> bool:
         """
         Wait until multiple keys are ALL at their expected value, OR ANY one key is at its exceptional value.
 
@@ -161,7 +164,7 @@ class PLCController:
         exceptions = exceptions or {}
 
         # combine dictionaries
-        keyvalues = {}
+        keyvalues = {} # type: typing.Dict[str, typing.Any]
         keyvalues.update(expectations)
         keyvalues.update(exceptions)
         if not keyvalues:
@@ -194,32 +197,32 @@ class PLCController:
             if timeout is not None:
                 timeout -= time.monotonic() - start
 
-    def Set(self, key, value):
+    def Set(self, key: str, value: typing.Any) -> None:
         """
         Set key in PLC memory.
         """
         self._memory.Write({key: value})
 
-    def SetMultiple(self, keyvalues):
+    def SetMultiple(self, keyvalues: typing.Mapping[str, typing.Any]) -> None:
         """
         Set multiple keys in PLC memory.
         """
         self._memory.Write(keyvalues)
 
-    def Get(self, key, defaultValue=None):
+    def Get(self, key: str, defaultValue: typing.Any = None) -> typing.Any:
         """
         Get value of a key in the current state snapshot of the PLC memory.
         """
         return self._state.get(key, defaultValue)
 
-    def SyncAndGet(self, key, defaultValue=None):
+    def SyncAndGet(self, key: str, defaultValue: typing.Any = None) -> typing.Any:
         """
         Synchronize the local memory snapshot with what has happened already, then get value of a key in the current state snapshot of the PLC memory.
         """
         self.Sync()
         return self.Get(key, defaultValue=defaultValue)
 
-    def GetMultiple(self, keys):
+    def GetMultiple(self, keys: typing.Iterator[str]) -> typing.Mapping[str, typing.Any]:
         """
         Get values of multiple keys in the current state snapshot of the PLC memory.
         """
@@ -229,39 +232,39 @@ class PLCController:
                 keyvalues[key] = self._state[key]
         return keyvalues
 
-    def SyncAndGetMultiple(self, keys):
+    def SyncAndGetMultiple(self, keys: typing.Iterator[str]) -> typing.Mapping[str, typing.Any]:
         """
         Synchronize the local memory snapshot with what has happened already, then get values of multiple keys in the current state snapshot of the PLC memory.
         """
         self.Sync()
         return self.GetMultiple(keys)
 
-    def GetString(self, key, defaultValue=''):
+    def GetString(self, key: str, defaultValue: str = '') -> str:
         value = self.Get(key, defaultValue=defaultValue)
         if not isinstance(value, str):
             return defaultValue
         return value
 
-    def SyncAndGetString(self, key, defaultValue=''):
+    def SyncAndGetString(self, key: str, defaultValue: str = '') -> str:
         self.Sync()
         return self.GetString(key, defaultValue=defaultValue)
 
-    def GetBoolean(self, key, defaultValue=False):
+    def GetBoolean(self, key: str, defaultValue: bool = False) -> bool:
         value = self.Get(key, defaultValue=defaultValue)
         if not isinstance(value, bool):
             return defaultValue
         return value
 
-    def SyncAndGetBoolean(self, key, defaultValue=False):
+    def SyncAndGetBoolean(self, key: str, defaultValue: bool = False) -> bool:
         self.Sync()
         return self.GetBoolean(key, defaultValue=defaultValue)
 
-    def GetInteger(self, key, defaultValue=0):
+    def GetInteger(self, key: str, defaultValue: int = 0) -> int:
         value = self.Get(key, defaultValue=defaultValue)
         if not isinstance(value, int):
             return defaultValue
         return value
 
-    def SyncAndGetInteger(self, key, defaultValue=0):
+    def SyncAndGetInteger(self, key: str, defaultValue: int = 0) -> int:
         self.Sync()
         return self.GetInteger(key, defaultValue=defaultValue)
