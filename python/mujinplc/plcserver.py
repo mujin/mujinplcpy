@@ -62,11 +62,11 @@ class PLCServer:
 
     _memory = None # type: plcmemory.PLCMemory # an instance of PLCMemory
     _endpoint = None # type: str # listening endpoint to bind to
-    _ctx = None # type: typing.Any # zmq context
+    _ctx = None # type: typing.Optional[zmq.Context] # zmq context
     _thread = None # type: typing.Optional[threading.Thread] # server thread
     _isok = False # type: bool # signal that the server thread should continue to run
 
-    def __init__(self, memory: plcmemory.PLCMemory, endpoint: str, ctx: typing.Any = None):
+    def __init__(self, memory: plcmemory.PLCMemory, endpoint: str, ctx: typing.Optional[zmq.Context] = None):
         self._memory = memory
         self._endpoint = endpoint
         self._ctx = ctx
