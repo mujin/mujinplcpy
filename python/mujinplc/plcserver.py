@@ -8,6 +8,9 @@ import logging
 log = logging.getLogger(__name__)
 
 class PLCServerSocket:
+    """
+    A ZMQ server socket implementation internally used by PLCServer.
+    """
 
     _ctx = None # allocated zmq context, need to free
     _socket = None # allocated zmq socket, need to close
@@ -25,24 +28,20 @@ class PLCServerSocket:
     def __del__(self):
         self.Destroy()
 
-    def SetDestroy(self):
-        pass
-
     def Destroy(self):
-        self.SetDestroy()
-
         if self._socket is not None:
             try:
                 self._socket.close()
-                self._socket = None
             except:
                 log.exception('caught exception when closing socket')
+            self._socket = None
 
         if self._ctx is not None:
             try:
                 self._ctx.destroy()
             except:
                 log.exception('caught exception when destroying context')
+            self._ctx = None
 
     def Poll(self, timeout=50):
         return self._socket.poll(timeout, zmq.POLLIN) == zmq.POLLIN
@@ -54,6 +53,9 @@ class PLCServerSocket:
         self._socket.send_json(data, zmq.NOBLOCK)
 
 class PLCServer:
+    """
+    A ZMQ server that hosts the PLC controller.
+    """
 
     _memory = None # an instance of PLCMemory
     _endpoint = None # listening endpoint to bind to
@@ -71,6 +73,9 @@ class PLCServer:
         self.Stop()
 
     def Start(self):
+        """
+        Start the PLC server on a background thread.
+        """
         self.Stop()
 
         self._isok = True
@@ -78,12 +83,18 @@ class PLCServer:
         self._thread.start()
 
     def IsRunning(self):
+        """
+        Whether ZMQ server is currently running.
+        """
         return self._isok
 
     def SetStop(self):
         self._isok = False
 
     def Stop(self):
+        """
+        Stop the PLC server. Will block until the background thread teminates.
+        """
         self.SetStop()
         if self._thread is not None:
             self._thread.join()

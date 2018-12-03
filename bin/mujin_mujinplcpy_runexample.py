@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from mujinplc import plcmemory, plcserver, plccontroller
+from mujinplc import plcmemory, plcserver, plccontroller, plclogic
 
 import logging
 log = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ if __name__ == '__main__':
 	log.info('server started.')
 
 	controller = plccontroller.PLCController(memory)
-	log.debug('%r', controller._Dequeue())
+	log.debug('%r', controller.WaitUntilAll({'startOrderCycle': True}))
 
 	# pause until we want to stop
 	# in a real program, should handle SIGTERM instead

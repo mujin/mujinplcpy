@@ -7,6 +7,9 @@ import logging
 log = logging.getLogger(__name__)
 
 class PLCMemory:
+    """
+    PLCMemory is a key-value store that supports locked PLC memory read write operations.
+    """
 
     _lock = None
     _entries = None
@@ -17,16 +20,13 @@ class PLCMemory:
         self._entries = {}
         self._observers = weakref.WeakSet()
 
-    def __del__(self):
-        self.Destroy()
-
-    def SetDestroy(self):
-        pass
-
-    def Destroy(self):
-        self.SetDestroy()
-
     def Read(self, keys):
+        """
+        Atomically read PLC memory.
+
+        :param keys: An array of strings representing the named memory addresses.\
+        :return: A dictionary containing the mapping between requested memory addresses and their stored values. If a requested address does not exist in the memory, it will be omitted here.
+        """
         keyvalues = {}
         with self._lock:
             for key in keys:
@@ -35,6 +35,11 @@ class PLCMemory:
         return keyvalues
 
     def Write(self, keyvalues):
+        """
+        Atomically write PLC memory.
+
+        :param keyvalues: A dictionary containing the mapping between named memory addresses and their desired values.
+        """
         modifications = {}
         observers = None
         with self._lock:
@@ -47,6 +52,7 @@ class PLCMemory:
             if modifications:
                 observers = list(self._observers)
 
+        # notify observers of the modifications
         if observers:
             for observer in observers:
                 observer.MemoryModified(modifications)
