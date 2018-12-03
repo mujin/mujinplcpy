@@ -12,6 +12,8 @@ class PLCMemory:
     PLCMemory is a key-value store that supports locked PLC memory read write operations.
     """
 
+    ValueType = typing.Optional[typing.Union[str, int, bool]]
+
     _lock = None # type: threading.Lock
     _entries = None # type: typing.Dict
     _observers = None # type: typing.Set[typing.Any]
@@ -21,7 +23,7 @@ class PLCMemory:
         self._entries = {}
         self._observers = weakref.WeakSet()
 
-    def Read(self, keys: typing.Iterable[str]) -> typing.Mapping[str, typing.Any]:
+    def Read(self, keys: typing.Iterable[str]) -> typing.Mapping[str, ValueType]:
         """
         Atomically read PLC memory.
 
@@ -35,7 +37,7 @@ class PLCMemory:
                     keyvalues[key] = self._entries[key]
         return keyvalues
 
-    def Write(self, keyvalues: typing.Mapping[str, typing.Any]) -> None:
+    def Write(self, keyvalues: typing.Mapping[str, ValueType]) -> None:
         """
         Atomically write PLC memory.
 

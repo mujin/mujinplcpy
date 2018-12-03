@@ -12,9 +12,9 @@ log = logging.getLogger(__name__)
 class PLCController:
 
     _memory = None # type: plcmemory.PLCMemory # an instance of PLCMemory
-    _state = None # type: typing.Dict[str, typing.Any] # current state which is a snapshot of the PLCMemory in time, _state is intentionally not protected by lock
+    _state = None # type: typing.Dict[str, plcmemory.PLCMemory.ValueType] # current state which is a snapshot of the PLCMemory in time, _state is intentionally not protected by lock
 
-    _queue = None # type: typing.List[typing.Mapping[str, typing.Any]] # incoming modifications queue
+    _queue = None # type: typing.List[typing.Mapping[str, plcmemory.PLCMemory.ValueType]] # incoming modifications queue
     _lock = None # type: threading.Lock # protects _queue
     _condition = None # type: threading.Condition # condition variable for _queue
 
@@ -35,10 +35,10 @@ class PLCController:
 
         self._memory.AddObserver(self)
 
-    def MemoryModified(self, modifications: typing.Optional[typing.Mapping[str, typing.Any]]) -> None:
+    def MemoryModified(self, modifications: typing.Optional[typing.Mapping[str, plcmemory.PLCMemory.ValueType]]) -> None:
         self._Enqueue(modifications)
 
-    def _Enqueue(self, modifications: typing.Optional[typing.Mapping[str, typing.Any]]) -> None:
+    def _Enqueue(self, modifications: typing.Optional[typing.Mapping[str, plcmemory.PLCMemory.ValueType]]) -> None:
         if not modifications:
             return
         if not self._heartbeatSignal or self._heartbeatSignal in modifications:
@@ -47,7 +47,7 @@ class PLCController:
             self._queue.append(modifications)
             self._condition.notify()
 
-    def _Dequeue(self, timeout: typing.Optional[float] = None, timeoutOnDisconnect: bool = True) -> typing.Optional[typing.Mapping[str, typing.Any]]:
+    def _Dequeue(self, timeout: typing.Optional[float] = None, timeoutOnDisconnect: bool = True) -> typing.Optional[typing.Mapping[str, plcmemory.PLCMemory.ValueType]]:
         start = time.monotonic()
         modifications = None
 
@@ -73,7 +73,7 @@ class PLCController:
         return modifications
 
     def _DequeueAll(self) -> None:
-        modifications = {} # type: typing.Dict[str, typing.Any]
+        modifications = {} # type: typing.Dict[str, plcmemory.PLCMemory.ValueType]
         with self._lock:
             for keyvalues in self._queue:
                 modifications.update(keyvalues)
@@ -108,7 +108,7 @@ class PLCController:
                 timeout -= time.monotonic() - start
         return True
 
-    def WaitFor(self, key: str, value: typing.Any, timeout: typing.Optional[float] = None) -> bool:
+    def WaitFor(self, key: str, value: plcmemory.PLCMemory.ValueType, timeout: typing.Optional[float] = None) -> bool:
         """
         Wait for a key to change to a particular value.
 
@@ -118,7 +118,7 @@ class PLCController:
         """
         return self.WaitForAny({key: value}, timeout=timeout)
 
-    def WaitForAny(self, keyvalues: typing.Mapping[str, typing.Any], timeout: typing.Optional[float] = None) -> bool:
+    def WaitForAny(self, keyvalues: typing.Mapping[str, plcmemory.PLCMemory.ValueType], timeout: typing.Optional[float] = None) -> bool:
         """
         Wait for multiple keys, return as soon as any one key has the expected value.
 
@@ -141,7 +141,7 @@ class PLCController:
             if timeout is not None:
                 timeout -= time.monotonic() - start
 
-    def WaitUntil(self, key: str, value: typing.Any, timeout: typing.Optional[float] = None) -> bool:
+    def WaitUntil(self, key: str, value: plcmemory.PLCMemory.ValueType, timeout: typing.Optional[float] = None) -> bool:
         """
         Wait until a key is at the expected value.
 
@@ -151,7 +151,7 @@ class PLCController:
         """
         return self.WaitUntilAll({key: value}, timeout=timeout)
 
-    def WaitUntilAll(self, expectations: typing.Optional[typing.Mapping[str, typing.Any]] = None, exceptions: typing.Optional[typing.Mapping[str, typing.Any]] = None, timeout: typing.Optional[float] = None) -> bool:
+    def WaitUntilAll(self, expectations: typing.Optional[typing.Mapping[str, plcmemory.PLCMemory.ValueType]] = None, exceptions: typing.Optional[typing.Mapping[str, plcmemory.PLCMemory.ValueType]] = None, timeout: typing.Optional[float] = None) -> bool:
         """
         Wait until multiple keys are ALL at their expected value, OR ANY one key is at its exceptional value.
 
@@ -164,7 +164,7 @@ class PLCController:
         exceptions = exceptions or {}
 
         # combine dictionaries
-        keyvalues = {} # type: typing.Dict[str, typing.Any]
+        keyvalues = {} # type: typing.Dict[str, plcmemory.PLCMemory.ValueType]
         keyvalues.update(expectations)
         keyvalues.update(exceptions)
         if not keyvalues:
@@ -197,32 +197,32 @@ class PLCController:
             if timeout is not None:
                 timeout -= time.monotonic() - start
 
-    def Set(self, key: str, value: typing.Any) -> None:
+    def Set(self, key: str, value: plcmemory.PLCMemory.ValueType) -> None:
         """
         Set key in PLC memory.
         """
         self._memory.Write({key: value})
 
-    def SetMultiple(self, keyvalues: typing.Mapping[str, typing.Any]) -> None:
+    def SetMultiple(self, keyvalues: typing.Mapping[str, plcmemory.PLCMemory.ValueType]) -> None:
         """
         Set multiple keys in PLC memory.
         """
         self._memory.Write(keyvalues)
 
-    def Get(self, key: str, defaultValue: typing.Any = None) -> typing.Any:
+    def Get(self, key: str, defaultValue: plcmemory.PLCMemory.ValueType = None) -> plcmemory.PLCMemory.ValueType:
         """
         Get value of a key in the current state snapshot of the PLC memory.
         """
         return self._state.get(key, defaultValue)
 
-    def SyncAndGet(self, key: str, defaultValue: typing.Any = None) -> typing.Any:
+    def SyncAndGet(self, key: str, defaultValue: plcmemory.PLCMemory.ValueType = None) -> plcmemory.PLCMemory.ValueType:
         """
         Synchronize the local memory snapshot with what has happened already, then get value of a key in the current state snapshot of the PLC memory.
         """
         self.Sync()
         return self.Get(key, defaultValue=defaultValue)
 
-    def GetMultiple(self, keys: typing.Iterator[str]) -> typing.Mapping[str, typing.Any]:
+    def GetMultiple(self, keys: typing.Iterator[str]) -> typing.Mapping[str, plcmemory.PLCMemory.ValueType]:
         """
         Get values of multiple keys in the current state snapshot of the PLC memory.
         """
@@ -232,7 +232,7 @@ class PLCController:
                 keyvalues[key] = self._state[key]
         return keyvalues
 
-    def SyncAndGetMultiple(self, keys: typing.Iterator[str]) -> typing.Mapping[str, typing.Any]:
+    def SyncAndGetMultiple(self, keys: typing.Iterator[str]) -> typing.Mapping[str, plcmemory.PLCMemory.ValueType]:
         """
         Synchronize the local memory snapshot with what has happened already, then get values of multiple keys in the current state snapshot of the PLC memory.
         """
