@@ -36,7 +36,8 @@ class PLCController:
         self._Enqueue(modifications)
 
     def _Enqueue(self, modifications):
-        # log.debug('memory modified: %r', modifications)
+        if not modifications:
+            return
         if not self._heartbeatSignal or self._heartbeatSignal in modifications:
             self._lastHeartbeat = time.monotonic()
         with self._lock:
@@ -87,12 +88,14 @@ class PLCController:
         Whether time since last heartbeat is within expectation indicating an active connection.
         """
         if self._maxHeartbeatInterval:
-            return time.monotonic() - self._lastHeartbeat < self._maxHeartbeatInterval
+            return self._lastHeartbeat is not None and time.monotonic() - self._lastHeartbeat < self._maxHeartbeatInterval
         return True
 
     def WaitUntilConnected(self, timeout=None):
         """
         Wait until IsConnected becomes true.
+
+        :return: True if successfully waited, False if timed out.
         """
         while not self.IsConnected():
             start = time.monotonic()
@@ -107,6 +110,8 @@ class PLCController:
         Wait for a key to change to a particular value.
 
         Specifically, if the key is already at such value, wait until it changes to something else and then changes back. If value is None, then wait for any change to the key.
+
+        :return: True if successfully waited, False if timed out.
         """
         return self.WaitForAny({key: value}, timeout=timeout)
 
@@ -115,6 +120,8 @@ class PLCController:
         Wait for multiple keys, return as soon as any one key has the expected value.
 
         If the passed in expected value of a key is None, then wait for any change to that key.
+
+        :return: True if successfully waited, False if timed out.
         """
         while True:
             start = time.monotonic()
@@ -136,6 +143,8 @@ class PLCController:
         Wait until a key is at the expected value.
 
         If the key is already at such value, return immediately.
+
+        :return: True if successfully waited, False if timed out.
         """
         return self.WaitUntilAll({key: value}, timeout=timeout)
 
@@ -145,6 +154,8 @@ class PLCController:
 
         If all the keys are already satisfying the expectations, then return immediately.
         If any of the exceptional conditions is met, then return immediately.
+
+        :return: True if successfully waited, False if timed out.
         """
         expectations = expectations or {}
         exceptions = exceptions or {}

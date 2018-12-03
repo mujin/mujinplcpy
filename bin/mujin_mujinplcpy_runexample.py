@@ -14,8 +14,12 @@ if __name__ == '__main__':
 	server.Start()
 	log.info('server started.')
 
-	controller = plccontroller.PLCController(memory)
-	log.debug('%r', controller.WaitUntilAll({'startOrderCycle': True}))
+	controller = plccontroller.PLCController(memory, maxHeartbeatInterval=0.1)
+	logic = plclogic.PLCLogic(controller)
+	# log.debug('%r', controller.WaitUntilAll({'startOrderCycle': True}))
+
+	logic.WaitUntilConnected()
+	log.info('connected.')
 
 	# pause until we want to stop
 	# in a real program, should handle SIGTERM instead
