@@ -43,26 +43,23 @@ class PLCMemory:
 
         :param keyvalues: A dictionary containing the mapping between named memory addresses and their desired values.
         """
-        modifications = {}
-        observers = None
         with self._lock:
+            modifications = {}
             for key, value in keyvalues.items():
                 if key in self._entries and value == self._entries[key]:
                     continue
-                self._entries[key] = value
                 modifications[key] = value
+            self._entries.update(modifications)
 
+            # notify observers of the modifications
+            # have to do it under lock to guarantee ordering
             if modifications:
-                observers = list(self._observers)
-
-        # notify observers of the modifications
-        if observers:
-            for observer in observers:
-                observer.MemoryModified(modifications)
+                for observer in self._observers:
+                    observer.MemoryModified(modifications)
 
     def AddObserver(self, observer: typing.Any) -> None:
-        modifications = None
         with self._lock:
             self._observers.add(observer)
-            modifications = dict(self._entries)
-        observer.MemoryModified(modifications)
+
+            # notify observer of the current state
+            observer.MemoryModified(dict(self._entries))
