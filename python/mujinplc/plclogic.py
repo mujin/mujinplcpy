@@ -4,6 +4,7 @@ import typing
 import enum
 
 from . import plccontroller
+from . import PLCDataObject
 
 class PLCWaitTimeout(Exception):
     pass
@@ -111,14 +112,14 @@ class PackComputationFinishCode(enum.Enum):
     FinishedBadOrderCyclePrecondition = 0xfffe
     FinishedPackingError = 0xffff
 
-class PLCOrderCycleStatus:
+class PLCOrderCycleStatus(PLCDataObject):
     isRunningOrderCycle = False # type: bool # whether the order cycle is currently running
     isRobotMoving = False # type: bool # whether the robot is currently moving
     numLeftInOrder = 0 # type: int # number of items left in order to be picked
     numPlacedInDest = 0 # type: int # number of items placed in destination container
     orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedNotAvailable # type: PLCOrderCycleFinishCode # finish code of order cycle
 
-class PLCStartOrderCycleParameters:
+class PLCStartOrderCycleParameters(PLCDataObject):
     partType = '' # type: str # type of the product to be picked, for example: "cola"
     orderNumber = 0 # type: int # number of items to be picked, for example: 1
     robotId = 0 # type: int # set to 1
@@ -239,13 +240,13 @@ class PLCLogic:
         """
         Gather order cycle status information in the current state.
         """
-        status = PLCOrderCycleStatus()
-        status.isRunningOrderCycle = self._controller.GetBoolean('isRunningOrderCycle')
-        status.isRobotMoving = self._controller.GetBoolean('isRobotMoving')
-        status.numLeftInOrder = self._controller.GetInteger('numLeftInOrder')
-        status.numPlacedInDest = self._controller.GetInteger('numPlacedInDest')
-        status.orderCycleFinishCode = PLCOrderCycleFinishCode(self._controller.GetInteger('orderCycleFinishCode'))
-        return status
+        return PLCOrderCycleStatus(
+            isRunningOrderCycle = self._controller.GetBoolean('isRunningOrderCycle'),
+            isRobotMoving = self._controller.GetBoolean('isRobotMoving'),
+            numLeftInOrder = self._controller.GetInteger('numLeftInOrder'),
+            numPlacedInDest = self._controller.GetInteger('numPlacedInDest'),
+            orderCycleFinishCode = PLCOrderCycleFinishCode(self._controller.GetInteger('orderCycleFinishCode')),
+        )
 
     def WaitForOrderCycleStatusChange(self, timeout: typing.Optional[float] = None) -> PLCOrderCycleStatus:
         """

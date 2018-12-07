@@ -4,6 +4,7 @@ import threading
 import asyncio
 import typing
 from . import plcmemory, plclogic, plccontroller
+from . import PLCDataObject
 
 import logging
 log = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ class PLCMaterialHandler:
         """
         return
 
-class PLCQueueOrderParameters:
+class PLCQueueOrderParameters(PLCDataObject):
     """
     Struct describing order data
     """
