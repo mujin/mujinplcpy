@@ -111,6 +111,13 @@ class PackComputationFinishCode(enum.Enum):
     FinishedBadOrderCyclePrecondition = 0xfffe
     FinishedPackingError = 0xffff
 
+class PLCOrderCycleStatus:
+    isRunningOrderCycle = False # type: bool # whether the order cycle is currently running
+    isRobotMoving = False # type: bool # whether the robot is currently moving
+    numLeftInOrder = 0 # type: int # number of items left in order to be picked
+    numPlacedInDest = 0 # type: int # number of items placed in destination container
+    orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedNotAvailable # type: PLCOrderCycleFinishCode # finish code of order cycle
+
 class PLCStartOrderCycleParameters:
     partType = '' # type: str # type of the product to be picked, for example: "cola"
     orderNumber = 0 # type: int # number of items to be picked, for example: 1
@@ -200,56 +207,149 @@ class PLCLogic:
             raise PLCWaitTimeout()
         self.CheckError()
 
-    def StartOrderCycle(self, startOrderCycleParameters: PLCStartOrderCycleParameters, timeout: typing.Optional[float] = None) -> None:
+    def StartOrderCycle(self, startOrderCycleParameters: PLCStartOrderCycleParameters, timeout: typing.Optional[float] = None) -> PLCOrderCycleStatus:
         """
         Start order cycle. Block until MUJIN controller acknowledge the start command.
         """
-        pass
+        self._controller.SetMultiple({
+            'orderPartType': startOrderCycleParameters.partType,
+            'orderNumber': startOrderCycleParameters.orderNumber,
+            'orderRobotId': startOrderCycleParameters.robotId,
+            'orderPickLocationIndex': startOrderCycleParameters.pickLocationIndex,
+            'orderPickContainerId': startOrderCycleParameters.pickContainerId,
+            'orderPickContainerType': startOrderCycleParameters.pickContainerType,
+            'orderPlaceLocationIndex': startOrderCycleParameters.placeLocationIndex,
+            'orderPlaceContainerId': startOrderCycleParameters.placeContainerId,
+            'orderPlaceContainerType': startOrderCycleParameters.placeContainerType,
+            'startOrderCycle': True,
+        })
+        try:
+            if not self._controller.WaitUntilAll({
+                'isRunningOrderCycle': True,
+            }, {
+                'isError': True,
+            }, timeout=timeout):
+                raise PLCWaitTimeout()
+        finally:
+            self._controller.Set('startOrderCycle', False)
+        self.CheckError()
+        return self.GetOrderCycleStatus()
 
-    def GetOrderCycleStatus(self) -> None:
+    def GetOrderCycleStatus(self) -> PLCOrderCycleStatus:
         """
         Gather order cycle status information in the current state.
         """
-        pass
+        status = PLCOrderCycleStatus()
+        status.isRunningOrderCycle = self._controller.GetBoolean('isRunningOrderCycle')
+        status.isRobotMoving = self._controller.GetBoolean('isRobotMoving')
+        status.numLeftInOrder = self._controller.GetInteger('numLeftInOrder')
+        status.numPlacedInDest = self._controller.GetInteger('numPlacedInDest')
+        status.orderCycleFinishCode = PLCOrderCycleFinishCode(self._controller.GetInteger('orderCycleFinishCode'))
+        return status
 
-    def WaitForOrderCycleStatusChange(self, timeout: typing.Optional[float] = None) -> None:
+    def WaitForOrderCycleStatusChange(self, timeout: typing.Optional[float] = None) -> PLCOrderCycleStatus:
         """
         Block until values in order cycle status changes.
         """
-        pass
+        self._controller.WaitForAny({
+            'isError': True,
 
-    def WaitUntilOrderCycleFinish(self, timeout: typing.Optional[float] = None) -> None:
+            # listen to any changes in the following addresses
+            'isRunningOrderCycle': None,
+            'isRobotMoving': None,
+            'numLeftInOrder': None,
+            'numPlacedInDest': None,
+            'orderCycleFinishCode':  None,
+        })
+        self.CheckError()
+        return self.GetOrderCycleStatus()
+
+    def WaitUntilOrderCycleFinish(self, timeout: typing.Optional[float] = None) -> PLCOrderCycleStatus:
         """
         Block until MUJIN controller finishes the order cycle.
         """
-        pass
+        if not self._controller.WaitUntilAll({
+            'isRunningOrderCycle': False,
+        }, {
+            'isError': True,
+        }, timeout=timeout):
+            raise PLCWaitTimeout()
+        self.CheckError()
+        return self.GetOrderCycleStatus()
 
-    def StopOrderCycle(self, timeout: typing.Optional[float] = None) -> None:
+    def StopOrderCycle(self, timeout: typing.Optional[float] = None) -> PLCOrderCycleStatus:
         """
         Signal MUJIN controller to stop order cycle and block until it is stopped.
         """
-        pass
+        self._controller.Set('stopOrderCycle', True)
+        try:
+            if not self._controller.WaitUntilAll({
+                'isRunningOrderCycle': False,
+            }, {
+                'isError': True,
+            }, timeout=timeout):
+                raise PLCWaitTimeout()
+        finally:
+            self._controller.Set('startOrderCycle', False)
+        self.CheckError()
+        return self.GetOrderCycleStatus()
 
     def StopImmediately(self, timeout: typing.Optional[float] = None) -> None:
         """
         Stop the current operation on MUJIN controller immediately.
         """
-        pass
+        self._controller.Set('stopImmediately', True)
+        try:
+            if not self._controller.WaitUntilAll({
+                'isRunningOrderCycle': False,
+                'isRobotMoving':  False,
+            }, {
+                'isError': True,
+            }, timeout=timeout):
+                raise PLCWaitTimeout()
+        finally:
+            self._controller.Set('stopImmediately', False)
+        self.CheckError()
 
     def WaitUntilMoveToHomeReady(self, timeout: typing.Optional[float] = None) -> None:
         """
         Block until MUJIN controller is ready to move robot to home position.
         """
-        pass
+        if not self._controller.WaitUntilAll({
+            'isRunningOrderCycle': False,
+            'isRobotMoving': False,
+            'isModeAuto': True,
+            'isSystemReady': True,
+        }, {
+            'isError': True,
+        }, timeout=timeout):
+            raise PLCWaitTimeout()
+        self.CheckError()
 
     def StartMoveToHome(self, timeout: typing.Optional[float] = None) -> None:
         """
         Signal MUJIN controller to move the robot to its home position. Block until the robot starts moving.
         """
-        pass
+        self._controller.Set('startMoveToHome', True)
+        try:
+            if not self._controller.WaitUntilAll({
+                'isRobotMoving': True,
+            }, {
+                'isError': True,
+            }, timeout=timeout):
+                raise PLCWaitTimeout()
+        finally:
+            self._controller.Set('startMoveToHome', False)
+        self.CheckError()
 
-    def WaitUntilRobotMoving(self, timeout: typing.Optional[float] = None) -> None:
+    def WaitUntilRobotMoving(self, isRobotMoving: bool = True, timeout: typing.Optional[float] = None) -> None:
         """
         Block until the robot moving state is expected.
         """
-        pass
+        if not self._controller.WaitUntilAll({
+            'isRobotMoving': isRobotMoving,
+        }, {
+            'isError': True,
+        }, timeout=timeout):
+            raise PLCWaitTimeout()
+        self.CheckError()
