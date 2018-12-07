@@ -29,6 +29,12 @@ class Example(plcproductioncycle.PLCMaterialHandler):
         """
         return
 
+    def Start(self):
+        self._productionCycle.Start()
+
+    def Stop(self):
+        self._productionCycle.Stop()
+
     def WaitUntilConnected(self) -> None:
         self._controller.WaitUntilConnected()
 
@@ -46,11 +52,13 @@ if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s %(name)s [%(levelname)s] [%(filename)s:%(lineno)s %(funcName)s] %(message)s', level=logging.DEBUG)
 
     memory = plcmemory.PLCMemory()
+    example = Example(memory)
+    example.Start()
+
     server = plcserver.PLCServer(memory, 'tcp://*:5555')
     server.Start()
     log.info('server started.')
 
-    example = Example(memory)
     example.WaitUntilConnected()
     log.info('connected.')
 
@@ -62,3 +70,5 @@ if __name__ == '__main__':
 
     server.Stop()
     log.info('server stopped.')
+
+    example.Stop()

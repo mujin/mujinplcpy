@@ -149,9 +149,30 @@ class PLCController:
 
         :return: True if successfully waited, False if timed out.
         """
-        return self.WaitUntilAll({key: value}, timeout=timeout)
+        return self.WaitUntilAllOrAny(expectations={key: value}, timeout=timeout)
 
-    def WaitUntilAll(self, expectations: typing.Optional[typing.Mapping[str, plcmemory.PLCMemory.ValueType]] = None, exceptions: typing.Optional[typing.Mapping[str, plcmemory.PLCMemory.ValueType]] = None, timeout: typing.Optional[float] = None) -> bool:
+    def WaitUntilAny(self, exceptions: typing.Optional[typing.Mapping[str, plcmemory.PLCMemory.ValueType]], timeout: typing.Optional[float] = None) -> bool:
+        """
+        Wait until any of the keys is at the expected value.
+
+        If the key is already at such value, return immediately.
+
+        :return: True if successfully waited, False if timed out.
+        """
+        return self.WaitUntilAllOrAny(exceptions=exceptions, timeout=timeout)
+
+    def WaitUntilAll(self, expectations: typing.Optional[typing.Mapping[str, plcmemory.PLCMemory.ValueType]], timeout: typing.Optional[float] = None) -> bool:
+        """
+        Wait until all of the keys is at the expected value.
+
+        If the key is already at such value, return immediately.
+
+        :return: True if successfully waited, False if timed out.
+        """
+        return self.WaitUntilAllOrAny(expectations=expectations, timeout=timeout)
+
+
+    def WaitUntilAllOrAny(self, expectations: typing.Optional[typing.Mapping[str, plcmemory.PLCMemory.ValueType]] = None, exceptions: typing.Optional[typing.Mapping[str, plcmemory.PLCMemory.ValueType]] = None, timeout: typing.Optional[float] = None) -> bool:
         """
         Wait until multiple keys are ALL at their expected value, OR ANY one key is at its exceptional value.
 

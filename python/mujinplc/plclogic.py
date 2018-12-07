@@ -196,7 +196,7 @@ class PLCLogic:
         """
         Block until MUJIN controller is ready to start order cycle.
         """
-        if not self._controller.WaitUntilAll({
+        if not self._controller.WaitUntilAllOrAny({
             'isRunningOrderCycle': False,
             'isRobotMoving': False,
             'isModeAuto': True,
@@ -225,7 +225,7 @@ class PLCLogic:
             'startOrderCycle': True,
         })
         try:
-            if not self._controller.WaitUntilAll({
+            if not self._controller.WaitUntilAllOrAny({
                 'isRunningOrderCycle': True,
             }, {
                 'isError': True,
@@ -269,7 +269,7 @@ class PLCLogic:
         """
         Block until MUJIN controller finishes the order cycle.
         """
-        if not self._controller.WaitUntilAll({
+        if not self._controller.WaitUntilAllOrAny({
             'isRunningOrderCycle': False,
         }, {
             'isError': True,
@@ -284,7 +284,7 @@ class PLCLogic:
         """
         self._controller.Set('stopOrderCycle', True)
         try:
-            if not self._controller.WaitUntilAll({
+            if not self._controller.WaitUntilAllOrAny({
                 'isRunningOrderCycle': False,
             }, {
                 'isError': True,
@@ -301,7 +301,7 @@ class PLCLogic:
         """
         self._controller.Set('stopImmediately', True)
         try:
-            if not self._controller.WaitUntilAll({
+            if not self._controller.WaitUntilAllOrAny({
                 'isRunningOrderCycle': False,
                 'isRobotMoving':  False,
             }, {
@@ -316,7 +316,7 @@ class PLCLogic:
         """
         Block until MUJIN controller is ready to move robot to home position.
         """
-        if not self._controller.WaitUntilAll({
+        if not self._controller.WaitUntilAllOrAny({
             'isRunningOrderCycle': False,
             'isRobotMoving': False,
             'isModeAuto': True,
@@ -333,7 +333,7 @@ class PLCLogic:
         """
         self._controller.Set('startMoveToHome', True)
         try:
-            if not self._controller.WaitUntilAll({
+            if not self._controller.WaitUntilAllOrAny({
                 'isRobotMoving': True,
             }, {
                 'isError': True,
@@ -347,7 +347,7 @@ class PLCLogic:
         """
         Block until the robot moving state is expected.
         """
-        if not self._controller.WaitUntilAll({
+        if not self._controller.WaitUntilAllOrAny({
             'isRobotMoving': isRobotMoving,
         }, {
             'isError': True,

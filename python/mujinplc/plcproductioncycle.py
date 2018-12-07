@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import threading
+import time
+import weakref
 import asyncio
 import typing
 from . import plcmemory, plclogic, plccontroller
@@ -59,21 +61,47 @@ class PLCProductionCycle:
     """
 
     _memory = None # type: plcmemory.PLCMemory # an instance of PLCMemory
-    _materialHandler = None # type: PLCMaterialHandler # an instance of PLCMaterialHandler, supplied by customer
+    _materialHandler = None # type: typing.Any # an instance of PLCMaterialHandler, supplied by customer
+
+    _isok = False # type: bool
+    _thread = None # type: typing.Optional[threading.Thread]
 
     def __init__(self, memory: plcmemory.PLCMemory, materialHandler: PLCMaterialHandler):
         self._memory = memory
-        self._materialHandler = materialHandler
+        self._materialHandler = weakref.ref(materialHandler)
 
+    def __del__(self):
+        self.Stop()
+
+    def Start(self) -> None:
+        self.Stop()
+
+        # start the main monitoring thread
+        self._isok = True
         self._thread = threading.Thread(target=self._RunThread, name='plcproductioncycle')
+        self._thread.start()
+
+    def Stop(self) -> None:
+        self._isok = False
+        if self._thread is not None:
+            self._thread.join()
+            self._thread = None
 
     def QueueOrder(self, orderUniqueId: str, queueOrderParameters: PLCQueueOrderParameters) -> None:
         pass
 
-
     def _RunThread(self) -> None:
         # monitor startMoveLocationX and startFinishOrder, then spin threads to handle them
-        pass
+        controller = plccontroller.PLCController(self._memory)
+        while self._isok:
+            if not controller.WaitUntilAny({
+                'startMoveLocation1': True,
+                'startMoveLocation2': True,
+                'startMoveLocation3': True,
+                'startMoveLocation4': True,
+                'startFinishOrder': True,
+            }, timeout=0.1):
+                continue
 
     def _RunMoveLocationThread(self, locationIndex: int) -> None:
         controller = plccontroller.PLCController(self._memory)
