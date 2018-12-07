@@ -2,7 +2,6 @@
 
 import threading
 import time
-import weakref
 import asyncio
 import typing
 from . import plcmemory, plclogic, plccontroller
@@ -61,14 +60,19 @@ class PLCProductionCycle:
     """
 
     _memory = None # type: plcmemory.PLCMemory # an instance of PLCMemory
-    _materialHandler = None # type: typing.Any # an instance of PLCMaterialHandler, supplied by customer
+    _materialHandler = None # type: PLCMaterialHandler # an instance of PLCMaterialHandler, supplied by customer
+    _locationIndices = None # type: typing.List[int]
 
     _isok = False # type: bool
     _thread = None # type: typing.Optional[threading.Thread]
+    _finishOrderThread = None # type: typing.Optional[threading.Thread]
+    _moveLocationThreads = None # type: typing.Dict[int, typing.Optional[threading.Thread]]
 
-    def __init__(self, memory: plcmemory.PLCMemory, materialHandler: PLCMaterialHandler):
+    def __init__(self, memory: plcmemory.PLCMemory, materialHandler: PLCMaterialHandler, maxLocationIndex: int = 4):
         self._memory = memory
-        self._materialHandler = weakref.ref(materialHandler)
+        self._materialHandler = materialHandler
+        self._locationIndices = list(range(1, maxLocationIndex + 1))
+        self._moveLocationThreads = {}
 
     def __del__(self):
         self.Stop()
@@ -94,21 +98,108 @@ class PLCProductionCycle:
         # monitor startMoveLocationX and startFinishOrder, then spin threads to handle them
         controller = plccontroller.PLCController(self._memory)
         while self._isok:
-            if not controller.WaitUntilAny({
-                'startMoveLocation1': True,
-                'startMoveLocation2': True,
-                'startMoveLocation3': True,
-                'startMoveLocation4': True,
-                'startFinishOrder': True,
-            }, timeout=0.1):
+            triggerSignals = {}
+            for locationIndex in self._locationIndices:
+                if not self._moveLocationThreads.get(locationIndex, None):
+                    triggerSignals['startMoveLocation%d' % locationIndex] = True
+            if not self._finishOrderThread:
+                triggerSignals['startFinishOrder'] = True
+
+            if not triggerSignals:
+                # everything running, nothing new to trigger
+                time.sleep(0.1)
                 continue
 
+            if not controller.WaitUntilAny(triggerSignals, timeout=0.1):
+                # nothing need to be triggered
+                continue
+
+            for locationIndex in self._locationIndices:
+                triggerSignal = 'startMoveLocation%d' % locationIndex
+                if triggerSignal not in triggerSignals:
+                    continue
+                if not controller.GetBoolean(triggerSignal):
+                    continue
+                log.debug('starting a thread to handle %s', triggerSignal)
+                thread = threading.Thread(target=self._RunMoveLocationThread, args=(locationIndex,), name='moveLocation%d' % locationIndex)
+                thread.start()
+                self._moveLocationThreads[locationIndex] = thread
+
+            triggerSignal = 'startFinishOrder'
+            if triggerSignal in triggerSignals and controller.GetBoolean(triggerSignal):
+                log.debug('starting a thread to handle %s', triggerSignal)
+                thread = threading.Thread(target=self._RunFinishOrderThread, name='finishOrder')
+                thread.start()
+                self._finishOrderThread = thread
+
     def _RunMoveLocationThread(self, locationIndex: int) -> None:
+        log.debug('moveLocation%d thread starting', locationIndex)
         controller = plccontroller.PLCController(self._memory)
-        if not controller.GetBoolean('startMoveLocation%d' % locationIndex):
-            return
+        finishCode = 0xffff
+        actualContainerId = ''
+        actualContainerType = ''
+        try:
+            if not controller.SyncAndGetBoolean('startMoveLocation%d' % locationIndex):
+                # trigger no longer alive
+                return
+
+            # first garther parameters
+            containerId = controller.GetString('moveLocation%dContainerId' % locationIndex)
+            containerType = controller.GetString('moveLocation%dContainerType' % locationIndex)
+            orderUniqueId = controller.GetString('moveLocation%dOrderUniqueId' % locationIndex)
+
+            # set output signals first
+            controller.SetMultiple({
+                'moveLocation%dFinishCode' % locationIndex: 0,
+                'isMoveLocation%dRunning' % locationIndex: True,
+                'location%dContainerId' % locationIndex: '',
+                'location%dContainerType' % locationIndex: '',
+                'location%dProhibited' % locationIndex: True,
+            })
+
+            # run customer code
+            actualContainerId, actualContainerType = asyncio.new_event_loop().run_until_complete(self._materialHandler.MoveLocationAsync(locationIndex, containerId, containerType, orderUniqueId))
+
+            controller.WaitUntil('startMoveLocation%d' % locationIndex, False)
+        finally:
+            log.debug('moveLocation%d thread stopping', locationIndex)
+            controller.SetMultiple({
+                'moveLocation%dFinishCode' % locationIndex: finishCode,
+                'isMoveLocation%dRunning' % locationIndex: False,
+                'location%dContainerId' % locationIndex: actualContainerId,
+                'location%dContainerType' % locationIndex: actualContainerType,
+                'location%dProhibited' % locationIndex: False,
+            })
+            self._moveLocationThreads[locationIndex] = None
 
     def _RunFinishOrderThread(self) -> None:
+        log.debug('finishOrder thread starting')
         controller = plccontroller.PLCController(self._memory)
-        if not controller.GetBoolean('startFinishOrder'):
-            return
+        finishCode = 0xffff
+        try:
+            if not controller.SyncAndGetBoolean('startFinishOrder'):
+                # trigger no longer alive
+                return
+
+            # first garther parameters
+            orderUniqueId = controller.GetString('finishOrderOrderUniqueId')
+            orderFinishCode = plclogic.PLCOrderCycleFinishCode(controller.GetInteger('finishOrderOrderFinishCode'))
+            numPutInDest = controller.GetInteger('finishOrderNumPutInDest')
+
+            # set output signals first
+            controller.SetMultiple({
+                'finishOrderFinishCode': 0,
+                'isFinishOrderRunning': True,
+            })
+
+            # run customer code
+            asyncio.new_event_loop().run_until_complete(self._materialHandler.FinishOrderAsync(orderUniqueId, orderFinishCode, numPutInDest))
+
+            controller.WaitUntil('startFinishOrder', False)
+        finally:
+            log.debug('finishOrder thread stopping')
+            controller.SetMultiple({
+                'finishOrderFinishCode': finishCode,
+                'isFinishOrderRunning': False,
+            })
+            self._finishOrderThread = None

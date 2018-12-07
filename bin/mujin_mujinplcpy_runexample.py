@@ -21,12 +21,18 @@ class Example(plcproductioncycle.PLCMaterialHandler):
         send request to agv to move, can return immediately even if agv has not started moving yet
         function should return a pair of actual containerId and containerType
         """
-        return containerId, containerType
+        log.info('containerId = %r', containerId)
+        log.info('containerType = %r', containerType)
+        log.info('orderUniqueId = %r', orderUniqueId)
+        return containerId + containerId, containerType
 
     async def FinishOrderAsync(self, orderUniqueId: str, orderFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDest: int) -> None:
         """
         when order status changed called by mujin
         """
+        log.info('orderUniqueId = %r', orderUniqueId)
+        log.info('orderFinishCode = %r', orderFinishCode)
+        log.info('numPutInDest = %r', numPutInDest)
         return
 
     def Start(self):
