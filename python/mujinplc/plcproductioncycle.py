@@ -133,7 +133,7 @@ class PLCProductionCycle:
                 self._finishOrderThread = thread
 
     def _RunMoveLocationThread(self, locationIndex: int) -> None:
-        log.debug('moveLocation%d thread starting', locationIndex)
+        loop = asyncio.new_event_loop()
         controller = plccontroller.PLCController(self._memory)
         finishCode = 0xffff
         actualContainerId = ''
@@ -158,7 +158,7 @@ class PLCProductionCycle:
             })
 
             # run customer code
-            actualContainerId, actualContainerType = asyncio.new_event_loop().run_until_complete(self._materialHandler.MoveLocationAsync(locationIndex, containerId, containerType, orderUniqueId))
+            actualContainerId, actualContainerType = loop.run_until_complete(self._materialHandler.MoveLocationAsync(locationIndex, containerId, containerType, orderUniqueId))
 
             controller.WaitUntil('startMoveLocation%d' % locationIndex, False)
         finally:
@@ -171,9 +171,10 @@ class PLCProductionCycle:
                 'location%dProhibited' % locationIndex: False,
             })
             self._moveLocationThreads[locationIndex] = None
+            loop.close()
 
     def _RunFinishOrderThread(self) -> None:
-        log.debug('finishOrder thread starting')
+        loop = asyncio.new_event_loop()
         controller = plccontroller.PLCController(self._memory)
         finishCode = 0xffff
         try:
@@ -193,7 +194,7 @@ class PLCProductionCycle:
             })
 
             # run customer code
-            asyncio.new_event_loop().run_until_complete(self._materialHandler.FinishOrderAsync(orderUniqueId, orderFinishCode, numPutInDest))
+            loop.run_until_complete(self._materialHandler.FinishOrderAsync(orderUniqueId, orderFinishCode, numPutInDest))
 
             controller.WaitUntil('startFinishOrder', False)
         finally:
@@ -203,3 +204,4 @@ class PLCProductionCycle:
                 'isFinishOrderRunning': False,
             })
             self._finishOrderThread = None
+            loop.close()
