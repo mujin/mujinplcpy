@@ -92,11 +92,45 @@ class PLCProductionCycle:
             self._thread = None
 
     def QueueOrder(self, orderUniqueId: str, queueOrderParameters: PLCQueueOrderParameters) -> None:
-        pass
+        # TODO: this is too simplified
+        controller = plccontroller.PLCController(self._memory)
+        controller.WaitUntil('isQueueOrderRunning', False)
+        controller.SetMultiple({
+            'queueOrderPartType': queueOrderParameters.partType,
+            'queueOrderNumber': queueOrderParameters.orderNumber,
+            'queueOrderRobotId': queueOrderParameters.robotId,
+            'queueOrderPickLocationIndex': queueOrderParameters.pickLocationIndex,
+            'queueOrderPickContainerId': queueOrderParameters.pickContainerId,
+            'queueOrderPickContainerType': queueOrderParameters.pickContainerType,
+            'queueOrderPlaceLocationIndex': queueOrderParameters.placeLocationIndex,
+            'queueOrderPlaceContainerId': queueOrderParameters.placeContainerId,
+            'queueOrderPlaceContainerType': queueOrderParameters.placeContainerType,
+            'startQueueOrder': True,
+        })
+        try:
+            controller.WaitUntil('isQueueOrderRunning', True)
+            controller.Set('startQueueOrder', False)
+            controller.WaitUntil('isQueueOrderRunning', False)
+            finishCode = controller.GetInteger('queueOrderFinishCode')
+            if finishCode != 1:
+                raise Exception('QueueOrder failed with finish code: %d' % finishCode)
+        finally:
+            controller.Set('startQueueOrder', False)
 
     def _RunThread(self) -> None:
         # monitor startMoveLocationX and startFinishOrder, then spin threads to handle them
         controller = plccontroller.PLCController(self._memory)
+
+        # clear signals
+        signalsToClear = {
+            'finishOrderFinishCode': 0,
+            'isFinishOrderRunning': False,
+        }
+        for locationIndex in self._locationIndices:
+            signalsToClear['isMoveLocation%dRunning' % locationIndex] = False
+            signalsToClear['moveLocation%dFinishCode' % locationIndex] = 0
+        controller.SetMultiple(signalsToClear)
+
         while self._isok:
             triggerSignals = {}
             for locationIndex in self._locationIndices:
@@ -131,6 +165,8 @@ class PLCProductionCycle:
                 thread = threading.Thread(target=self._RunFinishOrderThread, name='finishOrder')
                 thread.start()
                 self._finishOrderThread = thread
+
+        # TODO: handle exceptions of this thread and clear signal in the end
 
     def _RunMoveLocationThread(self, locationIndex: int) -> None:
         loop = asyncio.new_event_loop()
