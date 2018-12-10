@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import typing
+import asyncio
 
 from mujinplc import plcmemory, plcserver, plccontroller, plclogic, plcproductionrunner
 
@@ -24,6 +25,7 @@ class Example(plcproductionrunner.PLCMaterialHandler):
         log.info('containerId = %r', containerId)
         log.info('containerType = %r', containerType)
         log.info('orderUniqueId = %r', orderUniqueId)
+        await asyncio.sleep(30) # for testing
         return containerId + containerId, containerType
 
     async def FinishOrderAsync(self, orderUniqueId: str, orderFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDest: int) -> None:
@@ -33,6 +35,7 @@ class Example(plcproductionrunner.PLCMaterialHandler):
         log.info('orderUniqueId = %r', orderUniqueId)
         log.info('orderFinishCode = %r', orderFinishCode)
         log.info('numPutInDest = %r', numPutInDest)
+        await asyncio.sleep(30) # for testing
         return
 
     def Start(self):
@@ -68,7 +71,7 @@ if __name__ == '__main__':
     example.WaitUntilConnected()
     log.info('connected.')
 
-    example.QueueOrders()
+    # example.QueueOrders()
 
     # pause until we want to stop
     # in a real program, should handle SIGTERM instead
