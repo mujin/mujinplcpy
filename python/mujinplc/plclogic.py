@@ -390,20 +390,20 @@ class PLCLogic:
             raise PLCWaitTimeout()
         self.CheckError()
 
-    def StartPreparationCycle(self, startOrderCycleParameters: PLCStartPreparationCycleParameters, timeout: typing.Optional[float] = None) -> PLCPreparationCycleStatus:
+    def StartPreparationCycle(self, startPreparationCycleParameters: PLCStartPreparationCycleParameters, timeout: typing.Optional[float] = None) -> PLCPreparationCycleStatus:
         """
         Start preparation cycle. Block until MUJIN controller acknowledge the start command.
         """
         self._controller.SetMultiple({
-            'preparationPartType': startOrderCycleParameters.partType,
-            'preparationOrderNumber': startOrderCycleParameters.orderNumber,
-            'preparationRobotId': startOrderCycleParameters.robotId,
-            'preparationPickLocationIndex': startOrderCycleParameters.pickLocationIndex,
-            'preparationPickContainerId': startOrderCycleParameters.pickContainerId,
-            'preparationPickContainerType': startOrderCycleParameters.pickContainerType,
-            'preparationPlaceLocationIndex': startOrderCycleParameters.placeLocationIndex,
-            'preparationPlaceContainerId': startOrderCycleParameters.placeContainerId,
-            'preparationPlaceContainerType': startOrderCycleParameters.placeContainerType,
+            'preparationPartType': startPreparationCycleParameters.partType,
+            'preparationOrderNumber': startPreparationCycleParameters.orderNumber,
+            'preparationRobotId': startPreparationCycleParameters.robotId,
+            'preparationPickLocationIndex': startPreparationCycleParameters.pickLocationIndex,
+            'preparationPickContainerId': startPreparationCycleParameters.pickContainerId,
+            'preparationPickContainerType': startPreparationCycleParameters.pickContainerType,
+            'preparationPlaceLocationIndex': startPreparationCycleParameters.placeLocationIndex,
+            'preparationPlaceContainerId': startPreparationCycleParameters.placeContainerId,
+            'preparationPlaceContainerType': startPreparationCycleParameters.placeContainerType,
             'startPreparation': True,
         })
         try:
@@ -414,7 +414,7 @@ class PLCLogic:
             }, timeout=timeout):
                 raise PLCWaitTimeout()
         finally:
-            self._controller.Set('startOrderCycle', False)
+            self._controller.Set('startPreparation', False)
         self.CheckError()
         return self.GetPreparationCycleStatus()
 
