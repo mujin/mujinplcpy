@@ -4,6 +4,7 @@ import threading
 import time
 import asyncio
 import typing
+import enum
 from . import plcmemory, plclogic, plccontroller
 from . import PLCDataObject
 
@@ -53,6 +54,22 @@ class PLCQueueOrderParameters(PLCDataObject):
 
     packInputPartIndex = 0 # type: int # when using packFormation, index of the part in the pack
     packFormationComputationName = '' # type: str # when using packFormation, name of the formation
+
+class PLCMoveLocationFinishCode(enum.IntEnum):
+    """
+    Finish code for moveLocationX signal.
+    """
+    NotAvailable = 0x0000
+    Success = 0x0001
+    GenericError = 0xffff
+
+class PLCFinishOrderFinishCode(enum.IntEnum):
+    """
+    Finish code for finishOrder signal.
+    """
+    NotAvailable = 0x0000
+    Success = 0x0001
+    GenericError = 0xffff
 
 class PLCProductionRunner:
     """
@@ -180,7 +197,7 @@ class PLCProductionRunner:
     def _RunMoveLocationThread(self, locationIndex: int) -> None:
         loop = asyncio.new_event_loop()
         controller = plccontroller.PLCController(self._memory)
-        finishCode = 0xffff
+        finishCode = PLCMoveLocationFinishCode.GenericError
         actualContainerId = ''
         actualContainerType = ''
         try:
@@ -206,10 +223,17 @@ class PLCProductionRunner:
             actualContainerId, actualContainerType = loop.run_until_complete(self._materialHandler.MoveLocationAsync(locationIndex, containerId, containerType, orderUniqueId))
 
             controller.WaitUntil('startMoveLocation%d' % locationIndex, False)
+
+            finishCode = PLCMoveLocationFinishCode.Success
+
+        except Exception as e:
+            log.error('moveLocation%d thread error: %s', locationIndex, e)
+            finishCode = PLCMoveLocationFinishCode.GenericError
+
         finally:
             log.debug('moveLocation%d thread stopping', locationIndex)
             controller.SetMultiple({
-                'moveLocation%dFinishCode' % locationIndex: finishCode,
+                'moveLocation%dFinishCode' % locationIndex: int(finishCode),
                 'isMoveLocation%dRunning' % locationIndex: False,
                 'location%dContainerId' % locationIndex: actualContainerId,
                 'location%dContainerType' % locationIndex: actualContainerType,
@@ -221,7 +245,7 @@ class PLCProductionRunner:
     def _RunFinishOrderThread(self) -> None:
         loop = asyncio.new_event_loop()
         controller = plccontroller.PLCController(self._memory)
-        finishCode = 0xffff
+        finishCode = PLCFinishOrderFinishCode.GenericError
         try:
             if not controller.SyncAndGetBoolean('startFinishOrder'):
                 # trigger no longer alive
@@ -234,7 +258,7 @@ class PLCProductionRunner:
 
             # set output signals first
             controller.SetMultiple({
-                'finishOrderFinishCode': 0,
+                'finishOrderFinishCode': PLCFinishOrderFinishCode.NotAvailable,
                 'isFinishOrderRunning': True,
             })
 
@@ -242,10 +266,17 @@ class PLCProductionRunner:
             loop.run_until_complete(self._materialHandler.FinishOrderAsync(orderUniqueId, orderFinishCode, numPutInDest))
 
             controller.WaitUntil('startFinishOrder', False)
+
+            finishCode = PLCFinishOrderFinishCode.Success
+
+        except Exception as e:
+            log.error('finishOrder thread error: %s', e)
+            finishCode = PLCFinishOrderFinishCode.GenericError
+
         finally:
             log.debug('finishOrder thread stopping')
             controller.SetMultiple({
-                'finishOrderFinishCode': finishCode,
+                'finishOrderFinishCode': int(finishCode),
                 'isFinishOrderRunning': False,
             })
             self._finishOrderThread = None

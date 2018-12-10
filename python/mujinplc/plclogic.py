@@ -9,7 +9,7 @@ from . import PLCDataObject
 class PLCWaitTimeout(Exception):
     pass
 
-class PLCErrorCode(enum.Enum):
+class PLCErrorCode(enum.IntEnum):
     """
     MUJIN PLC ErrorCode
     """
@@ -57,7 +57,7 @@ class PLCError(Exception):
         """
         return self._errorDetail
 
-class PLCOrderCycleFinishCode(enum.Enum):
+class PLCOrderCycleFinishCode(enum.IntEnum):
     """
     MUJIN PLC OrderCycleFinishCode
     """
@@ -95,7 +95,7 @@ class PLCOrderCycleFinishCode(enum.Enum):
     FinishedBadOrderCyclePrecondition = 0xfffe
     FinishedGenericFailure = 0xffff
 
-class PLCPreparationFinishCode(enum.Enum):
+class PLCPreparationFinishCode(enum.IntEnum):
     PreparationNotAvailable = 0x0000
     PreparationFinishedSuccess = 0x0001
     PreparationFinishedImmediatelyStopped = 0x0102
@@ -103,7 +103,7 @@ class PLCPreparationFinishCode(enum.Enum):
     PreparationFinishedBadOrderCyclePrecondition = 0xfffe
     PreparationFinishedGenericError = 0xffff
 
-class PackComputationFinishCode(enum.Enum):
+class PackComputationFinishCode(enum.IntEnum):
     FinishedPackingUnknown = 0x0000
     FinishedPackingSuccess = 0x0001
     FinishedPackingInvalid = 0x0002
