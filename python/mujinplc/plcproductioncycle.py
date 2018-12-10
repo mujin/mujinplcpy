@@ -9,6 +9,25 @@ from . import plcmemory, plccontroller
 import logging
 log = logging.getLogger(__name__)
 
+class Order:
+    """
+    Struct describing order data. This Order class is  used internally
+    """
+    orderPartType = ""
+    orderPartSizeX = 0
+    orderPartSizeY = 0
+    orderPartSizeZ = 0
+    orderNumber = 0
+    orderRobotId = 0
+    orderUniqueId = ""
+
+    orderPickLocation = 0
+    orderPickContainerId = ""
+    orderPickContainerType = ""
+    orderPlaceLocation = 0
+    orderPlaceLocation = ""
+    orderPlaceContainerType = ""
+
 class PLCProductionCycle:
     
     _memory = None # type: plcmemory.PLCMemory # an instance of PLCMemory
