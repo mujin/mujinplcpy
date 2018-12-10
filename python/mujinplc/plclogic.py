@@ -7,6 +7,9 @@ from . import plccontroller
 from . import PLCDataObject
 
 class PLCWaitTimeout(Exception):
+    """
+    Timed out when waiting for some signal to change to expected state.
+    """
     pass
 
 class PLCErrorCode(enum.IntEnum):
@@ -103,7 +106,7 @@ class PLCPreparationFinishCode(enum.IntEnum):
     PreparationFinishedBadOrderCyclePrecondition = 0xfffe
     PreparationFinishedGenericError = 0xffff
 
-class PackComputationFinishCode(enum.IntEnum):
+class PLCPackComputationFinishCode(enum.IntEnum):
     FinishedPackingUnknown = 0x0000
     FinishedPackingSuccess = 0x0001
     FinishedPackingInvalid = 0x0002
@@ -118,6 +121,23 @@ class PLCOrderCycleStatus(PLCDataObject):
     numLeftInOrder = 0 # type: int # number of items left in order to be picked
     numPlacedInDest = 0 # type: int # number of items placed in destination container
     orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedNotAvailable # type: PLCOrderCycleFinishCode # finish code of order cycle
+
+class PLCPreparationCycleStatus(PLCDataObject):
+    isRunningPreparation = False # type: bool # whether the preparation cycle is currently running
+    preparationFinishCode = PLCPreparationFinishCode.PreparationNotAvailable # type: PLCPreparationFinishCode # finish code of preparation cycle
+
+class PLCStartPreparationCycleParameters(PLCDataObject):
+    partType = '' # type: str # type of the product to be picked, for example: "cola"
+    orderNumber = 0 # type: int # number of items to be picked, for example: 1
+    robotId = 0 # type: int # set to 1
+
+    pickLocationIndex = 0 # type: int # index of location for source container, location defined on mujin pendant
+    pickContainerId = '' # type: str # barcode of the source container, for example: "010023"
+    pickContainerType = '' # type: str # type of the source container, if all the same, set to ""
+
+    placeLocationIndex = 0 # type: int # index of location for dest container, location defined on mujin pendant
+    placeContainerId = '' # type: str # barcode of the dest contianer, for example: "pallet1"
+    placeContainerType = '' # type: str # type of the source container, if all the same, set to ""
 
 class PLCStartOrderCycleParameters(PLCDataObject):
     partType = '' # type: str # type of the product to be picked, for example: "cola"
@@ -291,7 +311,7 @@ class PLCLogic:
             }, timeout=timeout):
                 raise PLCWaitTimeout()
         finally:
-            self._controller.Set('startOrderCycle', False)
+            self._controller.Set('stopOrderCycle', False)
         self.CheckError()
         return self.GetOrderCycleStatus()
 
@@ -354,3 +374,99 @@ class PLCLogic:
         }, timeout=timeout):
             raise PLCWaitTimeout()
         self.CheckError()
+
+    def WaitUntilPreparationCycleReady(self, timeout: typing.Optional[float] = None) -> None:
+        """
+        Block until MUJIN controller is ready to start preparation cycle.
+        """
+        if not self._controller.WaitUntilAllOrAny({
+            'isRunningPreparation': False,
+            'isModeAuto': True,
+            'isSystemReady': True,
+            'isCycleReady': True,
+        }, {
+            'isError': True,
+        }, timeout=timeout):
+            raise PLCWaitTimeout()
+        self.CheckError()
+
+    def StartPreparationCycle(self, startOrderCycleParameters: PLCStartPreparationCycleParameters, timeout: typing.Optional[float] = None) -> PLCPreparationCycleStatus:
+        """
+        Start preparation cycle. Block until MUJIN controller acknowledge the start command.
+        """
+        self._controller.SetMultiple({
+            'preparationPartType': startOrderCycleParameters.partType,
+            'preparationOrderNumber': startOrderCycleParameters.orderNumber,
+            'preparationRobotId': startOrderCycleParameters.robotId,
+            'preparationPickLocationIndex': startOrderCycleParameters.pickLocationIndex,
+            'preparationPickContainerId': startOrderCycleParameters.pickContainerId,
+            'preparationPickContainerType': startOrderCycleParameters.pickContainerType,
+            'preparationPlaceLocationIndex': startOrderCycleParameters.placeLocationIndex,
+            'preparationPlaceContainerId': startOrderCycleParameters.placeContainerId,
+            'preparationPlaceContainerType': startOrderCycleParameters.placeContainerType,
+            'startPreparation': True,
+        })
+        try:
+            if not self._controller.WaitUntilAllOrAny({
+                'isRunningPreparation': True,
+            }, {
+                'isError': True,
+            }, timeout=timeout):
+                raise PLCWaitTimeout()
+        finally:
+            self._controller.Set('startOrderCycle', False)
+        self.CheckError()
+        return self.GetPreparationCycleStatus()
+
+    def GetPreparationCycleStatus(self) -> PLCPreparationCycleStatus:
+        """
+        Gather preparation cycle status information in the current state.
+        """
+        return PLCPreparationCycleStatus(
+            isRunningPreparation = self._controller.GetBoolean('isRunningPreparation'),
+            preparationFinishCode = PLCOrderCycleFinishCode(self._controller.GetInteger('preparationFinishCode')),
+        )
+
+    def WaitForPreparationCycleStatusChange(self, timeout: typing.Optional[float] = None) -> PLCPreparationCycleStatus:
+        """
+        Block until values in preparation cycle status changes.
+        """
+        self._controller.WaitForAny({
+            'isError': True,
+
+            # listen to any changes in the following addresses
+            'isRunningPreparation': None,
+            'preparationFinishCode': None,
+        })
+        self.CheckError()
+        return self.GetPreparationCycleStatus()
+
+    def WaitUntilPreparationCycleFinish(self, timeout: typing.Optional[float] = None) -> PLCPreparationCycleStatus:
+        """
+        Block until MUJIN controller finishes the preparation cycle.
+        """
+        if not self._controller.WaitUntilAllOrAny({
+            'isRunningPreparation': False,
+        }, {
+            'isError': True,
+        }, timeout=timeout):
+            raise PLCWaitTimeout()
+        self.CheckError()
+        return self.GetPreparationCycleStatus()
+
+    def StopPreparationCycle(self, timeout: typing.Optional[float] = None) -> PLCPreparationCycleStatus:
+        """
+        Signal MUJIN controller to stop preparation cycle and block until it is stopped.
+        """
+        self._controller.Set('stopPreparation', True)
+        try:
+            if not self._controller.WaitUntilAllOrAny({
+                'isRunningPreparation': False,
+            }, {
+                'isError': True,
+            }, timeout=timeout):
+                raise PLCWaitTimeout()
+        finally:
+            self._controller.Set('stopPreparation', False)
+        self.CheckError()
+        return self.GetPreparationCycleStatus()
