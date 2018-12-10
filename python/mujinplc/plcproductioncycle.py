@@ -2,7 +2,7 @@
 
 import threading
 import time
-import asyncio
+from enum import Enum
 import typing
 from . import plcmemory, plclogic, plccontroller
 from . import PLCDataObject
@@ -15,17 +15,16 @@ class PLCMaterialHandler:
     To be subclassed and implemented by customer.
     """
 
-    async def MoveLocationAsync(self, locationIndex: int, containerId: str, containerType: str, orderUniqueId: str) -> typing.Tuple[str, str]:
-        """
-        when location needs moving called by mujin
-        send request to agv to move, can return immediately even if agv has not started moving yet
-        function should return a pair of actual containerId and containerType
+    def MoveLocationAsync(self, locationIndex: int, containerId: str, containerType: str, orderUniqueId: str) -> typing.Tuple[str, str]:
+        """ function is called when location needs moving called by mujin
+        it should send request to agv to move.
+        this function should wait until location(agv/container) is ready and return a pair of actual containerId and containerType
         """
         return containerId, containerType
 
-    async def FinishOrderAsync(self, orderUniqueId: str, orderFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDest: int) -> None:
-        """
-        when order status changed called by mujin
+    def FinishOrderAsync(self, orderUniqueId: str, orderFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDest: int) -> None:
+        """ function is invoked when order status changed called by mujin
+        This function should wait until customer system confirm current order and return to Mujin. Mujin won't continue to work unless this function returned without raising any exception.
         """
         return
 
@@ -67,6 +66,16 @@ class PLCProductionCycle:
     _thread = None # type: typing.Optional[threading.Thread]
     _finishOrderThread = None # type: typing.Optional[threading.Thread]
     _moveLocationThreads = None # type: typing.Dict[int, typing.Optional[threading.Thread]]
+
+    class MoveLocationFinishCode(Enum):
+        NotAvailable = 0x0000
+        Success = 0x0001
+        Error = 0xffff
+
+    class FinishOrderFinishCode(Enum):
+        NotAvailable = 0x0000
+        Success = 0x0001
+        Error = 0xffff
 
     def __init__(self, memory: plcmemory.PLCMemory, materialHandler: PLCMaterialHandler, maxLocationIndex: int = 4):
         self._memory = memory
@@ -169,9 +178,8 @@ class PLCProductionCycle:
         # TODO: handle exceptions of this thread and clear signal in the end
 
     def _RunMoveLocationThread(self, locationIndex: int) -> None:
-        loop = asyncio.new_event_loop()
         controller = plccontroller.PLCController(self._memory)
-        finishCode = 0xffff
+        finishCode = MoveLocationFinishCode.NotAvailable
         actualContainerId = ''
         actualContainerType = ''
         try:
@@ -192,10 +200,17 @@ class PLCProductionCycle:
                 'location%dContainerType' % locationIndex: '',
                 'location%dProhibited' % locationIndex: True,
             })
-
             # run customer code
-            actualContainerId, actualContainerType = loop.run_until_complete(self._materialHandler.MoveLocationAsync(locationIndex, containerId, containerType, orderUniqueId))
-
+            try:
+                actualContainerId, actualContainerType = self._materialHandler.MoveLocationAsync(locationIndex, containerId, containerType, orderUniqueId)
+            except Exception as e:
+                # material handler raise exception
+                log.error("MoveLocation%dThread error = %s" % (locationIndex, e))
+                finishCode = MoveLocationFinishCode.Error
+            else:
+                log.info("MoveLocation%dThread success" % locationIndex)
+                finishCode = MoveLocationFinishCode.Success
+            # MoveLocationAsync return successfully. Location is Readly.
             controller.WaitUntil('startMoveLocation%d' % locationIndex, False)
         finally:
             log.debug('moveLocation%d thread stopping', locationIndex)
@@ -207,12 +222,12 @@ class PLCProductionCycle:
                 'location%dProhibited' % locationIndex: False,
             })
             self._moveLocationThreads[locationIndex] = None
-            loop.close()
 
     def _RunFinishOrderThread(self) -> None:
-        loop = asyncio.new_event_loop()
+        """ Start new thread to handle finishOrder requset
+        """
         controller = plccontroller.PLCController(self._memory)
-        finishCode = 0xffff
+        finishCode = FinishOrderFinishCode.NotAvailable
         try:
             if not controller.SyncAndGetBoolean('startFinishOrder'):
                 # trigger no longer alive
@@ -228,10 +243,15 @@ class PLCProductionCycle:
                 'finishOrderFinishCode': 0,
                 'isFinishOrderRunning': True,
             })
-
-            # run customer code
-            loop.run_until_complete(self._materialHandler.FinishOrderAsync(orderUniqueId, orderFinishCode, numPutInDest))
-
+            try:
+                # run customer code
+                self._materialHandler.FinishOrderAsync(orderUniqueId, orderFinishCode, numPutInDest)
+            except Exception as e:
+                # FinishOrder raise error;
+                finishCode = FinishOrderFinishCode.Error
+            else:
+                # material handler return successfully. set finishCode to Success
+                finishCode = FinishOrderFinishCode.Success
             controller.WaitUntil('startFinishOrder', False)
         finally:
             log.debug('finishOrder thread stopping')
@@ -240,4 +260,3 @@ class PLCProductionCycle:
                 'isFinishOrderRunning': False,
             })
             self._finishOrderThread = None
-            loop.close()
