@@ -149,6 +149,8 @@ class PLCProductionRunner:
 
         # clear signals
         signalsToClear = {
+            'startProductionCycle': False,
+            'stopProductionCycle': False,
             'finishOrderFinishCode': 0,
             'isFinishOrderRunning': False,
         }
@@ -157,42 +159,53 @@ class PLCProductionRunner:
             signalsToClear['moveLocation%dFinishCode' % locationIndex] = 0
         controller.SetMultiple(signalsToClear)
 
-        while self._isok:
-            triggerSignals = {}
-            for locationIndex in self._locationIndices:
-                if not self._moveLocationThreads.get(locationIndex, None):
-                    triggerSignals['startMoveLocation%d' % locationIndex] = True
-            if not self._finishOrderThread:
-                triggerSignals['startFinishOrder'] = True
+        # start production cycle
+        controller.Set('startProductionCycle', True)
+        controller.WaitUntil('isRunningProductionCycle', True)
+        controller.Set('startProductionCycle', False)
 
-            if not triggerSignals:
-                # everything running, nothing new to trigger
-                time.sleep(0.1)
-                continue
+        try:
+            while self._isok:
+                triggerSignals = {}
+                for locationIndex in self._locationIndices:
+                    if not self._moveLocationThreads.get(locationIndex, None):
+                        triggerSignals['startMoveLocation%d' % locationIndex] = True
+                if not self._finishOrderThread:
+                    triggerSignals['startFinishOrder'] = True
 
-            if not controller.WaitUntilAny(triggerSignals, timeout=0.1):
-                # nothing need to be triggered
-                continue
-
-            for locationIndex in self._locationIndices:
-                triggerSignal = 'startMoveLocation%d' % locationIndex
-                if triggerSignal not in triggerSignals:
+                if not triggerSignals:
+                    # everything running, nothing new to trigger
+                    time.sleep(0.1)
                     continue
-                if not controller.GetBoolean(triggerSignal):
+
+                if not controller.WaitUntilAny(triggerSignals, timeout=0.1):
+                    # nothing need to be triggered
                     continue
-                log.debug('starting a thread to handle %s', triggerSignal)
-                thread = threading.Thread(target=self._RunMoveLocationThread, args=(locationIndex,), name='moveLocation%d' % locationIndex)
-                thread.start()
-                self._moveLocationThreads[locationIndex] = thread
 
-            triggerSignal = 'startFinishOrder'
-            if triggerSignal in triggerSignals and controller.GetBoolean(triggerSignal):
-                log.debug('starting a thread to handle %s', triggerSignal)
-                thread = threading.Thread(target=self._RunFinishOrderThread, name='finishOrder')
-                thread.start()
-                self._finishOrderThread = thread
+                for locationIndex in self._locationIndices:
+                    triggerSignal = 'startMoveLocation%d' % locationIndex
+                    if triggerSignal not in triggerSignals:
+                        continue
+                    if not controller.GetBoolean(triggerSignal):
+                        continue
+                    log.debug('starting a thread to handle %s', triggerSignal)
+                    thread = threading.Thread(target=self._RunMoveLocationThread, args=(locationIndex,), name='moveLocation%d' % locationIndex)
+                    thread.start()
+                    self._moveLocationThreads[locationIndex] = thread
 
-        # TODO: handle exceptions of this thread and clear signal in the end
+                triggerSignal = 'startFinishOrder'
+                if triggerSignal in triggerSignals and controller.GetBoolean(triggerSignal):
+                    log.debug('starting a thread to handle %s', triggerSignal)
+                    thread = threading.Thread(target=self._RunFinishOrderThread, name='finishOrder')
+                    thread.start()
+                    self._finishOrderThread = thread
+        except Exception as e:
+            log.exception('caught exception while running the monitor thread for production runner: %s', e)
+        finally:
+            # stop the production cycle
+            controller.Set('stopProductionCycle', True)
+            controller.WaitUntil('isRunningProductionCycle', False)
+            controller.Set('stopProductionCycle', False)
 
     def _RunMoveLocationThread(self, locationIndex: int) -> None:
         loop = asyncio.new_event_loop()
@@ -227,7 +240,7 @@ class PLCProductionRunner:
             finishCode = PLCMoveLocationFinishCode.Success
 
         except Exception as e:
-            log.error('moveLocation%d thread error: %s', locationIndex, e)
+            log.exception('moveLocation%d thread error: %s', locationIndex, e)
             finishCode = PLCMoveLocationFinishCode.GenericError
 
         finally:
@@ -270,7 +283,7 @@ class PLCProductionRunner:
             finishCode = PLCFinishOrderFinishCode.Success
 
         except Exception as e:
-            log.error('finishOrder thread error: %s', e)
+            log.exception('finishOrder thread error: %s', e)
             finishCode = PLCFinishOrderFinishCode.GenericError
 
         finally:
