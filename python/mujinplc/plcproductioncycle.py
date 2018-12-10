@@ -3,7 +3,7 @@
 import threading
 import time
 import typing
-
+from enum import Enum
 from . import plcmemory, plccontroller
 
 import logging
@@ -35,6 +35,13 @@ class PLCProductionCycle:
 
     _isok = False # type: bool
     _thread = None # type: typing.Optional[threading.Thread]
+
+    class State(Enum):
+        Stop = 1 # production cycle stopped. Waiting for startProductionCycle to be true.
+        Idle = 2 # Production Cycle is started.  Queue is empty. System is in Idle
+        Start = 3 # Queue has order, start to deal with new order.
+        Running = 4 # Order from start state meet the condition , start to run order
+        Finish = 5 # Order Finished. Publish orderFinishCode to high level system and wait for return to continue.
 
     def __init__(self, memory: plcmemory.PLCMemory, maxLocationIndex: int = 4):
         self._memory = memory
