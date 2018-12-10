@@ -91,6 +91,15 @@ class PLCProductionCycle:
             self._thread.join()
             self._thread = None
 
+        if self._finishOrderThread is not None:
+            self._finishOrderThread.join()
+            self._finishOrderThread = None
+
+        for thread in self._moveLocationThreads.values():
+            if thread is not None:
+                thread.join()
+        self._moveLocationThreads = {}
+
     def QueueOrder(self, orderUniqueId: str, queueOrderParameters: PLCQueueOrderParameters) -> None:
         # TODO: this is too simplified
         controller = plccontroller.PLCController(self._memory)
