@@ -3,16 +3,16 @@
 
 import typing
 
-from mujinplc import plcmemory, plcserver, plccontroller, plclogic, plcproductioncycle
+from mujinplc import plcmemory, plcserver, plccontroller, plclogic, plcproductionrunner
 
 import logging
 log = logging.getLogger(__name__)
 
 
-class Example(plcproductioncycle.PLCMaterialHandler):
+class Example(plcproductionrunner.PLCMaterialHandler):
 
     def __init__(self, plcMemory: plcmemory.PLCMemory):
-        self._productionCycle = plcproductioncycle.PLCProductionCycle(plcMemory, self)
+        self._productionRunner = plcproductionrunner.PLCProductionRunner(plcMemory, self)
         self._controller = plccontroller.PLCController(memory, maxHeartbeatInterval=0.1)
 
     async def MoveLocationAsync(self, locationIndex: int, containerId: str, containerType: str, orderUniqueId: str) -> typing.Tuple[str, str]:
@@ -36,16 +36,16 @@ class Example(plcproductioncycle.PLCMaterialHandler):
         return
 
     def Start(self):
-        self._productionCycle.Start()
+        self._productionRunner.Start()
 
     def Stop(self):
-        self._productionCycle.Stop()
+        self._productionRunner.Stop()
 
     def WaitUntilConnected(self) -> None:
         self._controller.WaitUntilConnected()
 
     def QueueOrders(self) -> None:
-        self._productionCycle.QueueOrder('a', plcproductioncycle.PLCQueueOrderParameters(
+        self._productionRunner.QueueOrder('a', plcproductionrunner.PLCQueueOrderParameters(
             partType = 'cola',
             orderNumber = 1,
             pickLocationIndex = 1,
