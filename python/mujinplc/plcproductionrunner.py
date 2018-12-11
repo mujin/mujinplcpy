@@ -122,6 +122,7 @@ class PLCProductionRunner:
         controller = plccontroller.PLCController(self._memory)
         controller.WaitUntil('isQueueOrderRunning', False)
         controller.SetMultiple({
+            'queueOrderUniqueId': orderUniqueId,
             'queueOrderPartType': queueOrderParameters.partType,
             'queueOrderNumber': queueOrderParameters.orderNumber,
             'queueOrderRobotId': queueOrderParameters.robotId,
@@ -140,6 +141,7 @@ class PLCProductionRunner:
             finishCode = controller.GetInteger('queueOrderFinishCode')
             if finishCode != 1:
                 raise Exception('QueueOrder failed with finish code: %d' % finishCode)
+            log.debug('QueueOrder %s successed'%orderUniqueId)
         finally:
             controller.Set('startQueueOrder', False)
 
