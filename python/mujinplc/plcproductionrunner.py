@@ -128,11 +128,14 @@ class PLCProductionRunner:
 
     def QueueOrder(self, orderUniqueId: str, queueOrderParameters: PLCQueueOrderParameters) -> None:
         controller = plccontroller.PLCController(self._memory)
-        if not controller.WaitUntil('isQueueOrderRunning', False, timeout=1.0):
+        if not controller.WaitUntil('isRunningQueueOrder', False, timeout=1.0):
             raise Exception('QueueOrder is already running on server side')
         controller.SetMultiple({
             'queueOrderUniqueId': orderUniqueId,
             'queueOrderPartType': queueOrderParameters.partType,
+            'queueOrderPartSizeX': queueOrderParameters.partSizeX,
+            'queueOrderPartSizeY': queueOrderParameters.partSizeY,
+            'queueOrderPartSizeZ': queueOrderParameters.partSizeZ,
             'queueOrderNumber': queueOrderParameters.orderNumber,
             'queueOrderRobotId': queueOrderParameters.robotId,
             'queueOrderPickLocationIndex': queueOrderParameters.pickLocationIndex,
@@ -141,13 +144,15 @@ class PLCProductionRunner:
             'queueOrderPlaceLocationIndex': queueOrderParameters.placeLocationIndex,
             'queueOrderPlaceContainerId': queueOrderParameters.placeContainerId,
             'queueOrderPlaceContainerType': queueOrderParameters.placeContainerType,
+            'queueOrderPackInputPartIndex': queueOrderParameters.packInputPartIndex,
+            'queueOrderPackFormationComputationName': queueOrderParameters.packFormationComputationName,
             'startQueueOrder': True,
         })
         try:
             # TODO: later, we need timeout handling
-            controller.WaitUntil('isQueueOrderRunning', True)
+            controller.WaitUntil('isRunningQueueOrder', True)
             controller.Set('startQueueOrder', False)
-            controller.WaitUntil('isQueueOrderRunning', False)
+            controller.WaitUntil('isRunningQueueOrder', False)
             finishCode = PLCQueueOrderFinishCode(controller.GetInteger('queueOrderFinishCode'))
             if finishCode != PLCQueueOrderFinishCode.Success:
                 raise Exception('QueueOrder failed with finish code: %r' % finishCode)
@@ -163,21 +168,22 @@ class PLCProductionRunner:
         signalsToClear = {
             'startProductionCycle': False,
             'stopProductionCycle': False,
-            'finishOrderFinishCode': 0,
-            'isFinishOrderRunning': False,
+            'finishOrderFinishCode': int(PLCFinishOrderFinishCode.NotAvailable),
+            'isRunningFinishOrder': False,
         }
         for locationIndex in self._locationIndices:
-            signalsToClear['isMoveLocation%dRunning' % locationIndex] = False
-            signalsToClear['moveLocation%dFinishCode' % locationIndex] = 0
+            signalsToClear['isRunningMoveLocation%d' % locationIndex] = False
+            signalsToClear['moveLocation%dFinishCode' % locationIndex] = int(PLCMoveLocationFinishCode.NotAvailable)
         controller.SetMultiple(signalsToClear)
-
-        # start production cycle
-        controller.Set('startProductionCycle', True)
-        controller.WaitUntil('isRunningProductionCycle', True)
-        controller.Set('startProductionCycle', False)
 
         try:
             while self._isok:
+                # always start production cycle
+                if controller.SyncAndGetBoolean('isRunningProductionCycle'):
+                    controller.Set('startProductionCycle', False)
+                else:
+                    controller.Set('startProductionCycle', True)
+
                 triggerSignals = {}
                 for locationIndex in self._locationIndices:
                     if not self._moveLocationThreads.get(locationIndex, None):
@@ -216,7 +222,8 @@ class PLCProductionRunner:
         finally:
             # stop the production cycle
             controller.Set('stopProductionCycle', True)
-            controller.WaitUntil('isRunningProductionCycle', False)
+            if not controller.WaitUntil('isRunningProductionCycle', False, timeout=5.0):
+                log.warn('failed to stop production cycle within five second')
             controller.Set('stopProductionCycle', False)
 
     def _RunMoveLocationThread(self, locationIndex: int) -> None:
@@ -238,7 +245,7 @@ class PLCProductionRunner:
             # set output signals first
             controller.SetMultiple({
                 'moveLocation%dFinishCode' % locationIndex: 0,
-                'isMoveLocation%dRunning' % locationIndex: True,
+                'isRunningMoveLocation%d' % locationIndex: True,
                 'location%dContainerId' % locationIndex: '',
                 'location%dContainerType' % locationIndex: '',
                 'location%dProhibited' % locationIndex: True,
@@ -259,7 +266,7 @@ class PLCProductionRunner:
             log.debug('moveLocation%d thread stopping', locationIndex)
             controller.SetMultiple({
                 'moveLocation%dFinishCode' % locationIndex: int(finishCode),
-                'isMoveLocation%dRunning' % locationIndex: False,
+                'isRunningMoveLocation%d' % locationIndex: False,
                 'location%dContainerId' % locationIndex: actualContainerId,
                 'location%dContainerType' % locationIndex: actualContainerType,
                 'location%dProhibited' % locationIndex: False,
@@ -284,7 +291,7 @@ class PLCProductionRunner:
             # set output signals first
             controller.SetMultiple({
                 'finishOrderFinishCode': PLCFinishOrderFinishCode.NotAvailable,
-                'isFinishOrderRunning': True,
+                'isRunningFinishOrder': True,
             })
 
             # run customer code
@@ -302,7 +309,7 @@ class PLCProductionRunner:
             log.debug('finishOrder thread stopping')
             controller.SetMultiple({
                 'finishOrderFinishCode': int(finishCode),
-                'isFinishOrderRunning': False,
+                'isRunningFinishOrder': False,
             })
             self._finishOrderThread = None
             loop.close()

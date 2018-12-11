@@ -4,7 +4,7 @@
 import typing
 import asyncio
 
-from mujinplc import plcmemory, plcserver, plccontroller, plclogic, plcproductionrunner
+from mujinplc import plcmemory, plcserver, plccontroller, plclogic, plcproductionrunner, plcproductioncycle
 
 import logging
 log = logging.getLogger(__name__)
@@ -60,10 +60,21 @@ class Example(plcproductionrunner.PLCMaterialHandler):
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s %(name)s [%(levelname)s] [%(filename)s:%(lineno)s %(funcName)s] %(message)s', level=logging.DEBUG)
 
+    # have one plc memory per MUJIN controller
     memory = plcmemory.PLCMemory()
+    logger = plcmemory.PLCMemoryLogger(memory)
+
+    # production cycle is a standalone server process monitoring the memory
+    productionCycle = None
+    if True:
+        productionCycle = plcproductioncycle.PLCProductionCycle(memory)
+        productionCycle.Start()
+
+    # customer code
     example = Example(memory)
     example.Start()
 
+    # start a network server instance for MUJIN controllers to connect to
     server = plcserver.PLCServer(memory, 'tcp://*:5555')
     server.Start()
     log.info('server started.')
@@ -77,7 +88,10 @@ if __name__ == '__main__':
     # in a real program, should handle SIGTERM instead
     input('Press ENTER to stop.\n')
 
+    # stop everything
+    log.info('stopping.')
     server.Stop()
-    log.info('server stopped.')
-
     example.Stop()
+    if productionCycle:
+        productionCycle.Stop()
+    log.info('stopped.')

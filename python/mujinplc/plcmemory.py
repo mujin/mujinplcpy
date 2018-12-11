@@ -63,3 +63,11 @@ class PLCMemory:
 
             # notify observer of the current state
             observer.MemoryModified(dict(self._entries))
+
+class PLCMemoryLogger:
+
+    def __init__(self, memory: PLCMemory):
+        memory.AddObserver(self)
+
+    def MemoryModified(self, modifications: typing.Optional[typing.Mapping[str, PLCMemory.ValueType]]) -> None:
+        log.debug('%r', modifications)
