@@ -82,7 +82,7 @@ if __name__ == '__main__':
     example.WaitUntilConnected()
     log.info('connected.')
 
-    # example.QueueOrders()
+    example.QueueOrders()
 
     # pause until we want to stop
     # in a real program, should handle SIGTERM instead

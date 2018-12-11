@@ -97,6 +97,16 @@ class PLCController:
             return self._lastHeartbeat is not None and time.monotonic() - self._lastHeartbeat < self._maxHeartbeatInterval
         return True
 
+    def Wait(self, timeout: typing.Optional[float] = None) -> bool:
+        """
+        Wait until anything changes.
+
+        :return: True if successfully waited, False if timed out.
+        """
+        if self._Dequeue(timeout=timeout):
+            return True
+        return False
+
     def WaitUntilConnected(self, timeout: typing.Optional[float] = None) -> bool:
         """
         Wait until IsConnected becomes true.
