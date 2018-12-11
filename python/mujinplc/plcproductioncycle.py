@@ -238,12 +238,6 @@ class PLCProductionCycle:
                 if order:
                     self._SetOrderCycleState(PLCOrderCycleState.Starting, order)
 
-        # after starting the order, check that source and dest matches requirement, and call moveLocation if necessary
-        # after starting the order, pick an order to start preparation
-        # after starting the preparation, check that source and dest matches requirment, and call moveLocation if necessary
-        # when order finish, call finishOrder
-        # after finishOrder, wait for preparation to finish and start order
-
         if self._IsOrderCycleState(PLCOrderCycleState.Starting):
             order = self._GetOrderCycleStateOrder()
             controller.SetMultiple({
@@ -398,12 +392,16 @@ class PLCProductionCycle:
                 self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
             elif not controller.GetBoolean('isRunningPreparation'):
                 # handle isError and orderCycleFinishCode here
-                finishCode = PLCPreparationFinishCode(controller.GetInteger('preparationFinishCode'))
-                if finishCode == PLCPreparationFinishCode.PreparationFinishedSuccess:
-                    order = self._GetOrderCycleStateOrder()
+                order = self._GetOrderCycleStateOrder()
+                order.preparationFinishCode = PLCPreparationFinishCode(controller.GetInteger('preparationFinishCode'))
+                if order.preparationFinishCode == PLCPreparationFinishCode.PreparationFinishedSuccess:
                     self._SetPreparationCycleState(PLCPreparationCycleState.Prepared, order)
                 else:
                     self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
+
+        if self._IsPreparationCycleState(PLCPreparationCycleState.Prepared):
+            # TODO: need to wait until the order is used to continue
+            self._SetPreparationCycleState(PLCPreparationCycleState.Stopped)
 
         if self._IsPreparationCycleState(PLCPreparationCycleState.Stopping):
             controller.SetMultiple({
