@@ -6,7 +6,8 @@ import time
 import enum
 
 from . import plcmemory, plccontroller
-from .plcproductionrunner import PLCMoveLocationFinishCode, PLCQueueOrderFinishCode
+from .plcproductionrunner import PLCMoveLocationFinishCode, PLCQueueOrderFinishCode, PLCFinishOrderFinishCode
+from .plclogic import PLCOrderCycleFinishCode, PLCPreparationFinishCode
 from . import PLCDataObject
 
 import logging
@@ -38,6 +39,10 @@ class PLCOrder(PLCDataObject):
     packInputPartIndex = 0 # type: int # when using packFormation, index of the part in the pack
     packFormationComputationName = '' # type: str # when using packFormation, name of the formation
 
+    numPutInDest = 0 # type: int
+    orderFinishCode = PLCOrderCycleFinishCode.FinishedNotAvailable # type: PLCOrderCycleFinishCode
+    preparationFinishCode = PLCPreparationFinishCode.PreparationNotAvailable # type: PLCPreparationFinishCode
+
 class PLCProductionCycleState(enum.Enum):
     Idle = 'idle'
     Starting = 'starting'
@@ -50,6 +55,9 @@ class PLCOrderCycleState(enum.Enum):
     Starting = 'starting'
     Running = 'running'
     Error = 'error'
+    Finish = 'finish'
+    Finishing = 'finishing'
+    Finished = 'finished'
     Stopping = 'stopping'
     Stopped = 'stopped'
 
@@ -57,6 +65,7 @@ class PLCPreparationCycleState(enum.Enum):
     Idle = 'idle'
     Starting = 'starting'
     Running = 'running'
+    Prepared = 'prepared'
     Error = 'error'
     Stopping = 'stopping'
     Stopped = 'stopped'
@@ -212,7 +221,6 @@ class PLCProductionCycle:
         return self._orderCycleState[0] == state
 
     def _GetOrderCycleStateOrder(self) -> PLCOrder:
-        assert(self._orderCycleState[0] in (PLCOrderCycleState.Starting, PLCOrderCycleState.Running))
         order = self._orderCycleState[2]
         assert(order is not None)
         return order
@@ -222,8 +230,10 @@ class PLCProductionCycle:
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetOrderCycleState(PLCOrderCycleState.Stopping)
             else:
-                # start out with nothing running
-                # pick an order to start executing without preparation
+                order = None
+                if self._IsPreparationCycleState(PLCPreparationCycleState.Prepared):
+                    order = self._GetPreparationCycleStateOrder()
+
                 order = None # self._SelectNextOrder()
                 if order:
                     self._SetOrderCycleState(PLCOrderCycleState.Starting, order)
@@ -262,7 +272,7 @@ class PLCProductionCycle:
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetOrderCycleState(PLCOrderCycleState.Stopping)
             elif controller.GetBoolean('isRunningOrderCycle'):
-                self._SetOrderCycleState(PLCOrderCycleState.Running)
+                self._SetOrderCycleState(PLCOrderCycleState.Running, order)
 
         if self._IsOrderCycleState(PLCOrderCycleState.Running):
             controller.Set('startOrderCycle', False)
@@ -271,7 +281,36 @@ class PLCProductionCycle:
                 self._SetOrderCycleState(PLCOrderCycleState.Stopping)
             elif not controller.GetBoolean('isRunningOrderCycle'):
                 # handle isError and orderCycleFinishCode here
-                pass
+                order = self._GetOrderCycleStateOrder()
+                order.orderFinishCode = PLCOrderCycleFinishCode(controller.GetInteger('orderCycleFinishCode'))
+                order.numPutInDest = controller.GetInteger('numPutInDest')
+                self._SetOrderCycleState(PLCOrderCycleState.Finish, order)
+
+        if self._IsOrderCycleState(PLCOrderCycleState.Finish):
+            order = self._GetOrderCycleStateOrder()
+            controller.SetMultiple({
+                'finishOrderOrderUniqueId': order.uniqueId,
+                'finishOrderOrderFinishCode': int(order.orderFinishCode),
+                'finishOrderNumPutInDest': order.numPutInDest,
+                'startFinishOrder': True,
+            })
+            if controller.GetBoolean('isRunningFinishOrder'):
+                self._SetOrderCycleState(PLCOrderCycleState.Finishing, order)
+
+        if self._IsOrderCycleState(PLCOrderCycleState.Finishing):
+            controller.Set('startFinishOrder', False)
+
+            if not controller.GetBoolean('isRunningFinishOrder'):
+                finishCode = PLCFinishOrderFinishCode(controller.GetInteger('finishOrderFinishCode'))
+                # TODO: check finishCode
+                order = self._GetOrderCycleStateOrder()
+                self._SetOrderCycleState(PLCOrderCycleState.Finished, order)
+
+        if self._IsOrderCycleState(PLCOrderCycleState.Finished):
+            if self._IsState(PLCProductionCycleState.Running):
+                self._SetOrderCycleState(PLCOrderCycleState.Idle)
+            else:
+                self._SetOrderCycleState(PLCOrderCycleState.Stopped)
 
         if self._IsOrderCycleState(PLCOrderCycleState.Stopping):
             controller.SetMultiple({
@@ -308,7 +347,6 @@ class PLCProductionCycle:
         return self._preparationCycleState[0] == state
 
     def _GetPreparationCycleStateOrder(self) -> PLCOrder:
-        assert(self._preparationCycleState[0] in (PLCPreparationCycleState.Starting, PLCPreparationCycleState.Running))
         order = self._preparationCycleState[2]
         assert(order is not None)
         return order
@@ -318,6 +356,7 @@ class PLCProductionCycle:
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
             elif self._IsOrderCycleState(PLCOrderCycleState.Running):
+                # when the order cycle is running, we can consider whether to start next preparation
                 order = None # self._SelectNextOrder()
                 if order:
                     self._SetPreparationCycleState(PLCPreparationCycleState.Starting, order)
@@ -350,7 +389,7 @@ class PLCProductionCycle:
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
             elif controller.GetBoolean('isRunningPreparation'):
-                self._SetPreparationCycleState(PLCPreparationCycleState.Running)
+                self._SetPreparationCycleState(PLCPreparationCycleState.Running, order)
 
         if self._IsPreparationCycleState(PLCPreparationCycleState.Running):
             controller.Set('startPreparation', False)
@@ -359,7 +398,12 @@ class PLCProductionCycle:
                 self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
             elif not controller.GetBoolean('isRunningPreparation'):
                 # handle isError and orderCycleFinishCode here
-                pass
+                finishCode = PLCPreparationFinishCode(controller.GetInteger('preparationFinishCode'))
+                if finishCode == PLCPreparationFinishCode.PreparationFinishedSuccess:
+                    order = self._GetOrderCycleStateOrder()
+                    self._SetPreparationCycleState(PLCPreparationCycleState.Prepared, order)
+                else:
+                    self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
 
         if self._IsPreparationCycleState(PLCPreparationCycleState.Stopping):
             controller.SetMultiple({
@@ -394,7 +438,6 @@ class PLCProductionCycle:
         return self._locationStates[locationIndex][0] == state
 
     def _GetLocationStateOrder(self, locationIndex: int) -> PLCOrder:
-        assert(self._locationStates[locationIndex][0] in (PLCLocationState.Move, PLCLocationState.Moving, PLCLocationState.Moved))
         order = self._locationStates[locationIndex][2]
         assert(order is not None)
         return order
@@ -486,7 +529,6 @@ class PLCProductionCycle:
         return self._queueOrderState[0] == state
 
     def _GetQueueOrderStateOrder(self) -> PLCOrder:
-        assert(self._queueOrderState[0] in (PLCQueueOrderState.Running,))
         order = self._queueOrderState[2]
         assert(order is not None)
         return order
