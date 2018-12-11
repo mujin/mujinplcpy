@@ -47,7 +47,7 @@ class PLCProductionCycle:
 
 
 
-    def __init__(self, memory: plcmemory.PLCMemory, maxLocationIndex:int = 4):
+    def __init__(self, memory: plcmemory.PLCMemory, maxLocationIndex: int = 4):
         self._memory = memory
         self._locationIndices = list(range(1, maxLocationIndex + 1))
         for location in self._locationIndices:
@@ -112,7 +112,6 @@ class PLCProductionCycle:
                     "isQueueOrderRunning": False,
                     "queueOrderFinishCode": queueOrderFinishCode
                 })
-                log.error(f'simon set queueorder running {queueOrderFinishCode}')
 
     def __del__(self):
         self.Stop()
