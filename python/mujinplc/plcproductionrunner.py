@@ -55,6 +55,14 @@ class PLCQueueOrderParameters(PLCDataObject):
     packInputPartIndex = 0 # type: int # when using packFormation, index of the part in the pack
     packFormationComputationName = '' # type: str # when using packFormation, name of the formation
 
+class PLCQueueOrderFinishCode(enum.IntEnum):
+    """
+    Finish code for queueOrder signal.
+    """
+    NotAvailable = 0x0000
+    Success = 0x0001
+    GenericError = 0xffff
+
 class PLCMoveLocationFinishCode(enum.IntEnum):
     """
     Finish code for moveLocationX signal.
@@ -118,9 +126,9 @@ class PLCProductionRunner:
         self._moveLocationThreads = {}
 
     def QueueOrder(self, orderUniqueId: str, queueOrderParameters: PLCQueueOrderParameters) -> None:
-        # TODO: this is too simplified
         controller = plccontroller.PLCController(self._memory)
-        controller.WaitUntil('isQueueOrderRunning', False)
+        if not controller.WaitUntil('isQueueOrderRunning', False, timeout=1.0):
+            raise Exception('QueueOrder is already running on server side')
         controller.SetMultiple({
             'queueOrderUniqueId': orderUniqueId,
             'queueOrderPartType': queueOrderParameters.partType,
@@ -135,13 +143,14 @@ class PLCProductionRunner:
             'startQueueOrder': True,
         })
         try:
+            # TODO: later, we need timeout handling
             controller.WaitUntil('isQueueOrderRunning', True)
             controller.Set('startQueueOrder', False)
             controller.WaitUntil('isQueueOrderRunning', False)
-            finishCode = controller.GetInteger('queueOrderFinishCode')
-            if finishCode != 1:
-                raise Exception('QueueOrder failed with finish code: %d' % finishCode)
-            log.debug('QueueOrder %s successed'%orderUniqueId)
+            finishCode = PLCQueueOrderFinishCode(controller.GetInteger('queueOrderFinishCode'))
+            if finishCode != PLCQueueOrderFinishCode.Success:
+                raise Exception('QueueOrder failed with finish code: %r' % finishCode)
+            log.debug('QueueOrder %s succeeded', orderUniqueId)
         finally:
             controller.Set('startQueueOrder', False)
 
