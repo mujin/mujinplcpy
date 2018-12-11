@@ -5,6 +5,7 @@ import time
 import asyncio
 import typing
 import enum
+
 from . import plcmemory, plclogic, plccontroller
 from . import PLCDataObject
 

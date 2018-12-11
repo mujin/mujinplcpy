@@ -57,6 +57,9 @@ class PLCController:
                 return None
 
             with self._lock:
+                if self._queue:
+                    modifications = self._queue.pop(0)
+                    break
                 if self._condition.wait(0.05):
                     modifications = self._queue.pop(0)
                     break
