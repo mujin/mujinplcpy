@@ -245,12 +245,22 @@ class PLCProductionCycle:
         if self._IsOrderCycleState(PLCOrderCycleState.Idle):
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetOrderCycleState(PLCOrderCycleState.Stopping)
+            elif self._IsPreparationCycleState(PLCPreparationCycleState.Starting) or self._IsPreparationCycleState(PLCPreparationCycleState.Running):
+                # if preparation is running, need to wait for it to finish
+                pass
             else:
                 order = None
                 if self._IsPreparationCycleState(PLCPreparationCycleState.Prepared):
                     order = self._GetPreparationCycleStateOrder()
+                    # TODO: check that we can execute prepared order
+                if not order:
+                    candidates = []
+                    for locationIndex in self._locationIndices:
+                        if self._locationsQueue[locationIndex]:
+                            candidates.append(self._locationsQueue[locationIndex][0])
+                    if candidates:
+                        order = candidates[0]
 
-                order = None # self._SelectNextOrder()
                 if order:
                     self._SetOrderCycleState(PLCOrderCycleState.Starting, order)
 
@@ -315,7 +325,12 @@ class PLCProductionCycle:
             if not controller.GetBoolean('isRunningFinishOrder'):
                 finishCode = PLCFinishOrderFinishCode(controller.GetInteger('finishOrderFinishCode'))
                 # TODO: check finishCode
+
+                # remove order from queue
                 order = self._GetOrderCycleStateOrder()
+                assert(self._locationsQueue[order.pickLocationIndex][0] is order)
+                self._locationsQueue[order.pickLocationIndex].pop(0)
+
                 self._SetOrderCycleState(PLCOrderCycleState.Finished, order)
 
         if self._IsOrderCycleState(PLCOrderCycleState.Finished):
@@ -369,7 +384,7 @@ class PLCProductionCycle:
                 self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
             elif self._IsOrderCycleState(PLCOrderCycleState.Running):
                 # when the order cycle is running, we can consider whether to start next preparation
-                order = None # self._SelectNextOrder()
+                order = None # TODO: self._SelectNextOrder()
                 if order:
                     self._SetPreparationCycleState(PLCPreparationCycleState.Starting, order)
 
@@ -513,6 +528,7 @@ class PLCProductionCycle:
             if not controller.GetBoolean('isRunningMoveLocation%d' % locationIndex):
                 finishCode = PLCMoveLocationFinishCode(controller.GetInteger('moveLocation%dFinishCode' % locationIndex))
                 # TODO: check finish code and set next state based on that
+                order = self._GetLocationStateOrder(locationIndex)
                 self._SetLocationState(locationIndex, PLCLocationState.Moved, order)
 
         if self._IsLocationState(locationIndex, PLCLocationState.Moved):

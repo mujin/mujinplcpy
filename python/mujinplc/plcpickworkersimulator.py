@@ -31,9 +31,15 @@ class PLCPickWorkerOrder(PLCDataObject):
 
 class PLCPickWorkerBackend:
 
+    _memory = None # type: plcmemory.PLCMemory
     _preparedOrder = None # type: typing.Optional[PLCPickWorkerOrder]
 
+    def __init__(self, memory: plcmemory.PLCMemory):
+        self._memory = memory
+
     async def RunOrderCycleAsync(self, order: PLCPickWorkerOrder) -> PLCOrderCycleStatus:
+        controller = plccontroller.PLCController(self._memory)
+
         isPrepared = False
         if self._preparedOrder is not None and \
            self._preparedOrder.uniqueId == order.uniqueId and \
@@ -50,10 +56,34 @@ class PLCPickWorkerBackend:
            self._preparedOrder = None
 
         log.warn('running order cycle: %r, isPrepared = %r', order, isPrepared)
-        await asyncio.sleep(1)
+        while True:
+            await asyncio.sleep(0.2)
+            controller.Sync()
+            if controller.GetString('location%dProhibited' % order.pickLocationIndex):
+                continue
+            if controller.GetString('location%dProhibited' % order.placeLocationIndex):
+                continue
+            if controller.GetString('location%dContainerId' % order.pickLocationIndex) != order.pickContainerId:
+                continue
+            if controller.GetString('location%dContainerType' % order.pickLocationIndex) != order.pickContainerType:
+                continue
+            if controller.GetString('location%dContainerId' % order.placeLocationIndex) != order.placeContainerId:
+                continue
+            if controller.GetString('location%dContainerType' % order.placeLocationIndex) != order.placeContainerType:
+                continue
+            break
+        log.info('containers in position for order cycle')
         if not isPrepared:
             await asyncio.sleep(5)
-        await asyncio.sleep(5 * order.orderNumber)
+        controller.Set('isRobotMoving', True)
+        for numPutInDestination in range(1, order.orderNumber + 1):
+            await asyncio.sleep(5)
+            controller.SetMultiple({
+                'numPutInDestination': numPutInDestination,
+                'numLeftInOrder': order.orderNumber - numPutInDestination,
+            })
+        controller.Set('isRobotMoving', False)
+
         return PLCOrderCycleStatus(
             orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedOrderComplete,
             numPutInDestination = order.orderNumber,
@@ -61,8 +91,29 @@ class PLCPickWorkerBackend:
         )
 
     async def RunPreparationCycleAsync(self, order: PLCPickWorkerOrder) -> PLCPreparationCycleStatus:
-        log.debug('%r', order)
+        controller = plccontroller.PLCController(self._memory)
+
         self._preparedOrder = None
+
+        log.debug('running preparation: %r', order)
+        while True:
+            await asyncio.sleep(0.2)
+            controller.Sync()
+            if controller.GetString('location%dProhibited' % order.pickLocationIndex):
+                continue
+            if controller.GetString('location%dProhibited' % order.placeLocationIndex):
+                continue
+            if controller.GetString('location%dContainerId' % order.pickLocationIndex) != order.pickContainerId:
+                continue
+            if controller.GetString('location%dContainerType' % order.pickLocationIndex) != order.pickContainerType:
+                continue
+            if controller.GetString('location%dContainerId' % order.placeLocationIndex) != order.placeContainerId:
+                continue
+            if controller.GetString('location%dContainerType' % order.placeLocationIndex) != order.placeContainerType:
+                continue
+            break
+        log.info('containers in position for preparation')
+
         await asyncio.sleep(4)
         self._preparedOrder = order
         return PLCPreparationCycleStatus(
@@ -83,7 +134,7 @@ class PLCPickWorkerSimulator:
 
     def __init__(self, memory: plcmemory.PLCMemory, backend: typing.Optional[PLCPickWorkerBackend] = None):
         self._memory = memory
-        self._backend = backend or PLCPickWorkerBackend()
+        self._backend = backend or PLCPickWorkerBackend(memory)
         self._threads = {
             'resetError': None,
             'startOrderCycle': None,

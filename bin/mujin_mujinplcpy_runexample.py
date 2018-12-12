@@ -26,8 +26,8 @@ class Example(plcproductionrunner.PLCMaterialHandler):
         log.info('containerId = %r', containerId)
         log.info('containerType = %r', containerType)
         log.info('orderUniqueId = %r', orderUniqueId)
-        await asyncio.sleep(30) # for testing
-        return containerId + containerId, containerType
+        await asyncio.sleep(1) # for testing
+        return containerId, containerType
 
     async def FinishOrderAsync(self, orderUniqueId: str, orderFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDestination: int) -> None:
         """
@@ -36,7 +36,7 @@ class Example(plcproductionrunner.PLCMaterialHandler):
         log.info('orderUniqueId = %r', orderUniqueId)
         log.info('orderFinishCode = %r', orderFinishCode)
         log.info('numPutInDestination = %r', numPutInDestination)
-        await asyncio.sleep(30) # for testing
+        await asyncio.sleep(1) # for testing
         return
 
     def Start(self):
