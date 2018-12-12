@@ -48,6 +48,14 @@ class PLCError(Exception):
         self._errorCode = errorCode
         self._errorDetail = errorDetail
 
+    def __repr__(self) -> str:
+        return '<PLCError(errorCode=%r, errorDetail=%r)>' % (self._errorCode, self._errorDetail)
+
+    def __str__(self) -> str:
+        if self._errorDetail:
+            return '%s (%s)' % (self._errorCode, self._errorDetail)
+        return '%s' % self._errorCode
+
     def GetErrorCode(self) -> PLCErrorCode:
         """
         MUJIN PLC Error Code
@@ -119,7 +127,7 @@ class PLCOrderCycleStatus(PLCDataObject):
     isRunningOrderCycle = False # type: bool # whether the order cycle is currently running
     isRobotMoving = False # type: bool # whether the robot is currently moving
     numLeftInOrder = 0 # type: int # number of items left in order to be picked
-    numPlacedInDest = 0 # type: int # number of items placed in destination container
+    numPutInDestination = 0 # type: int # number of items placed in destination container
     orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedNotAvailable # type: PLCOrderCycleFinishCode # finish code of order cycle
 
 class PLCPreparationCycleStatus(PLCDataObject):
@@ -129,7 +137,7 @@ class PLCPreparationCycleStatus(PLCDataObject):
 class PLCStartPreparationCycleParameters(PLCDataObject):
     partType = '' # type: str # type of the product to be picked, for example: "cola"
     orderNumber = 0 # type: int # number of items to be picked, for example: 1
-    robotId = 0 # type: int # set to 1
+    robotName = '' # type: str
 
     pickLocationIndex = 0 # type: int # index of location for source container, location defined on mujin pendant
     pickContainerId = '' # type: str # barcode of the source container, for example: "010023"
@@ -142,7 +150,7 @@ class PLCStartPreparationCycleParameters(PLCDataObject):
 class PLCStartOrderCycleParameters(PLCDataObject):
     partType = '' # type: str # type of the product to be picked, for example: "cola"
     orderNumber = 0 # type: int # number of items to be picked, for example: 1
-    robotId = 0 # type: int # set to 1
+    robotName = 0 # type: str
 
     pickLocationIndex = 0 # type: int # index of location for source container, location defined on mujin pendant
     pickContainerId = '' # type: str # barcode of the source container, for example: "010023"
@@ -235,7 +243,7 @@ class PLCLogic:
         self._controller.SetMultiple({
             'orderPartType': startOrderCycleParameters.partType,
             'orderNumber': startOrderCycleParameters.orderNumber,
-            'orderRobotId': startOrderCycleParameters.robotId,
+            'orderRobotName': startOrderCycleParameters.robotName,
             'orderPickLocationIndex': startOrderCycleParameters.pickLocationIndex,
             'orderPickContainerId': startOrderCycleParameters.pickContainerId,
             'orderPickContainerType': startOrderCycleParameters.pickContainerType,
@@ -264,7 +272,7 @@ class PLCLogic:
             isRunningOrderCycle = self._controller.GetBoolean('isRunningOrderCycle'),
             isRobotMoving = self._controller.GetBoolean('isRobotMoving'),
             numLeftInOrder = self._controller.GetInteger('numLeftInOrder'),
-            numPlacedInDest = self._controller.GetInteger('numPlacedInDest'),
+            numPutInDestination = self._controller.GetInteger('numPutInDestination'),
             orderCycleFinishCode = PLCOrderCycleFinishCode(self._controller.GetInteger('orderCycleFinishCode')),
         )
 
@@ -279,7 +287,7 @@ class PLCLogic:
             'isRunningOrderCycle': None,
             'isRobotMoving': None,
             'numLeftInOrder': None,
-            'numPlacedInDest': None,
+            'numPutInDestination': None,
             'orderCycleFinishCode':  None,
         })
         self.CheckError()
@@ -397,7 +405,7 @@ class PLCLogic:
         self._controller.SetMultiple({
             'preparationPartType': startPreparationCycleParameters.partType,
             'preparationOrderNumber': startPreparationCycleParameters.orderNumber,
-            'preparationRobotId': startPreparationCycleParameters.robotId,
+            'preparationRobotName': startPreparationCycleParameters.robotName,
             'preparationPickLocationIndex': startPreparationCycleParameters.pickLocationIndex,
             'preparationPickContainerId': startPreparationCycleParameters.pickContainerId,
             'preparationPickContainerType': startPreparationCycleParameters.pickContainerType,

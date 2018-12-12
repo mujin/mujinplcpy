@@ -6,11 +6,11 @@ class PLCDataObject:
         name = self.__class__.__name__
         for key, value in kwargs.items():
             if not hasattr(self, key):
-                raise Exception('%s does not have attribute %s' % (name, key))
+                raise ValueError('%s does not have attribute %s' % (name, key))
             originalType = type(getattr(self, key))
             valueType = type(value)
             if originalType != valueType:
-                raise Exception('attribute %s of %s is of type %r, but passed in value is of type %r' % (key, name, originalType, valueType))
+                raise ValueError('attribute %s of %s is of type %r, but passed in value is of type %r' % (key, name, originalType, valueType))
             setattr(self, key, value)
 
     def __repr__(self):

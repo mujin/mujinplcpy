@@ -5,7 +5,7 @@ import sys
 import typing
 import asyncio
 
-from mujinplc import plcmemory, plcserver, plccontroller, plclogic, plcproductionrunner, plcproductioncycle
+from mujinplc import plcmemory, plcserver, plccontroller, plclogic, plcproductionrunner, plcproductioncycle, plcpickworkersimulator
 
 import logging
 log = logging.getLogger(__name__)
@@ -29,13 +29,13 @@ class Example(plcproductionrunner.PLCMaterialHandler):
         await asyncio.sleep(30) # for testing
         return containerId + containerId, containerType
 
-    async def FinishOrderAsync(self, orderUniqueId: str, orderFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDest: int) -> None:
+    async def FinishOrderAsync(self, orderUniqueId: str, orderFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDestination: int) -> None:
         """
         when order status changed called by mujin
         """
         log.info('orderUniqueId = %r', orderUniqueId)
         log.info('orderFinishCode = %r', orderFinishCode)
-        log.info('numPutInDest = %r', numPutInDest)
+        log.info('numPutInDestination = %r', numPutInDestination)
         await asyncio.sleep(30) # for testing
         return
 
@@ -91,6 +91,12 @@ if __name__ == '__main__':
         productionCycle = plcproductioncycle.PLCProductionCycle(memory)
         productionCycle.Start()
 
+    # pick worker simulator
+    pickWorkerSimulator = None
+    if True:
+        pickWorkerSimulator = plcpickworkersimulator.PLCPickWorkerSimulator(memory)
+        pickWorkerSimulator.Start()
+
     # customer code
     example = Example(memory)
     example.Start()
@@ -115,4 +121,6 @@ if __name__ == '__main__':
     example.Stop()
     if productionCycle:
         productionCycle.Stop()
+    if pickWorkerSimulator:
+        pickWorkerSimulator.Stop()
     log.warn('stopped.')

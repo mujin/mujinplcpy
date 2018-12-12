@@ -25,7 +25,7 @@ class PLCMaterialHandler:
         """
         return containerId, containerType
 
-    async def FinishOrderAsync(self, orderUniqueId: str, orderFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDest: int) -> None:
+    async def FinishOrderAsync(self, orderUniqueId: str, orderFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDestination: int) -> None:
         """
         when order status changed called by mujin
         """
@@ -43,7 +43,7 @@ class PLCQueueOrderParameters(PLCDataObject):
 
     orderNumber = 0 # type: int # number of items to be picked, for example: 1
 
-    robotId = 0 # type: int # set to 1
+    robotName = '' # type: str
 
     pickLocationIndex = 0 # type: int # index of location for source container, location defined on mujin pendant
     pickContainerId = '' # type: str # barcode of the source container, for example: "010023"
@@ -145,7 +145,7 @@ class PLCProductionRunner:
             'queueOrderPartSizeY': queueOrderParameters.partSizeY,
             'queueOrderPartSizeZ': queueOrderParameters.partSizeZ,
             'queueOrderNumber': queueOrderParameters.orderNumber,
-            'queueOrderRobotId': queueOrderParameters.robotId,
+            'queueOrderRobotName': queueOrderParameters.robotName,
             'queueOrderPickLocationIndex': queueOrderParameters.pickLocationIndex,
             'queueOrderPickContainerId': queueOrderParameters.pickContainerId,
             'queueOrderPickContainerType': queueOrderParameters.pickContainerType,
@@ -294,7 +294,7 @@ class PLCProductionRunner:
             # first garther parameters
             orderUniqueId = controller.GetString('finishOrderOrderUniqueId')
             orderFinishCode = plclogic.PLCOrderCycleFinishCode(controller.GetInteger('finishOrderOrderFinishCode'))
-            numPutInDest = controller.GetInteger('finishOrderNumPutInDest')
+            numPutInDestination = controller.GetInteger('finishOrderNumPutInDestination')
 
             # set output signals first
             controller.SetMultiple({
@@ -303,7 +303,7 @@ class PLCProductionRunner:
             })
 
             # run customer code
-            loop.run_until_complete(self._materialHandler.FinishOrderAsync(orderUniqueId, orderFinishCode, numPutInDest))
+            loop.run_until_complete(self._materialHandler.FinishOrderAsync(orderUniqueId, orderFinishCode, numPutInDestination))
 
             controller.WaitUntil('startFinishOrder', False)
 

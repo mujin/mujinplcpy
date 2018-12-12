@@ -26,7 +26,7 @@ class PLCOrder(PLCDataObject):
 
     orderNumber = 0 # type: int # number of items to be picked, for example: 1
 
-    robotId = 0 # type: int # set to 1
+    robotName = '' # type: str
 
     pickLocationIndex = 0 # type: int # index of location for source container, location defined on mujin pendant
     pickContainerId = '' # type: str # barcode of the source container, for example: '010023'
@@ -39,7 +39,8 @@ class PLCOrder(PLCDataObject):
     packInputPartIndex = 0 # type: int # when using packFormation, index of the part in the pack
     packFormationComputationName = '' # type: str # when using packFormation, name of the formation
 
-    numPutInDest = 0 # type: int
+    numPutInDestination = 0 # type: int
+    numLeftInOrder = 0 # type: int
     orderFinishCode = PLCOrderCycleFinishCode.FinishedNotAvailable # type: PLCOrderCycleFinishCode
     preparationFinishCode = PLCPreparationFinishCode.PreparationNotAvailable # type: PLCPreparationFinishCode
 
@@ -264,7 +265,7 @@ class PLCProductionCycle:
                 'orderPartSizeZ': order.partSizeZ,
 
                 'orderNumber': order.orderNumber,
-                'orderRobotId': order.robotId,
+                'orderRobotName': order.robotName,
 
                 'orderPickLocationIndex': order.pickLocationIndex,
                 'orderPickContainerId': order.pickContainerId,
@@ -292,7 +293,8 @@ class PLCProductionCycle:
                 # handle isError and orderCycleFinishCode here
                 order = self._GetOrderCycleStateOrder()
                 order.orderFinishCode = PLCOrderCycleFinishCode(controller.GetInteger('orderCycleFinishCode'))
-                order.numPutInDest = controller.GetInteger('numPutInDest')
+                order.numPutInDestination = controller.GetInteger('numPutInDestination')
+                order.numLeftInOrder = controller.GetInteger('numLeftInOrder')
                 self._SetOrderCycleState(PLCOrderCycleState.Finish, order)
 
         if self._IsOrderCycleState(PLCOrderCycleState.Finish):
@@ -300,7 +302,8 @@ class PLCProductionCycle:
             controller.SetMultiple({
                 'finishOrderOrderUniqueId': order.uniqueId,
                 'finishOrderOrderFinishCode': int(order.orderFinishCode),
-                'finishOrderNumPutInDest': order.numPutInDest,
+                'finishOrderNumPutInDestination': order.numPutInDestination,
+                'finishOrderNumLeftInOrder': order.numLeftInOrder,
                 'startFinishOrder': True,
             })
             if controller.GetBoolean('isRunningFinishOrder'):
@@ -381,7 +384,7 @@ class PLCProductionCycle:
                 'preparationPartSizeZ': order.partSizeZ,
 
                 'preparationOrderNumber': order.orderNumber,
-                'preparationRobotId': order.robotId,
+                'preparationRobotName': order.robotName,
 
                 'preparationPickLocationIndex': order.pickLocationIndex,
                 'preparationPickContainerId': order.pickContainerId,
@@ -564,7 +567,7 @@ class PLCProductionCycle:
 
                     orderNumber = controller.GetInteger('queueOrderNumber'),
 
-                    robotId = controller.GetInteger('queueOrderRobotId'),
+                    robotName = controller.GetString('queueOrderRobotName'),
 
                     pickLocationIndex = controller.GetInteger('queueOrderPickLocationIndex'),
                     pickContainerId = controller.GetString('queueOrderPickContainerId'),
