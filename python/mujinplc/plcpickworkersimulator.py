@@ -31,9 +31,29 @@ class PLCPickWorkerOrder(PLCDataObject):
 
 class PLCPickWorkerBackend:
 
+    _preparedOrder = None # type: typing.Optional[PLCPickWorkerOrder]
+
     async def RunOrderCycleAsync(self, order: PLCPickWorkerOrder) -> PLCOrderCycleStatus:
-        log.debug('%r', order)
-        await asyncio.sleep(3 + 5 * order.orderNumber)
+        isPrepared = False
+        if self._preparedOrder is not None and \
+           self._preparedOrder.uniqueId == order.uniqueId and \
+           self._preparedOrder.partType == order.partType and \
+           self._preparedOrder.orderNumber == order.orderNumber and \
+           self._preparedOrder.robotName == order.robotName and \
+           self._preparedOrder.pickLocationIndex == order.pickLocationIndex and \
+           self._preparedOrder.pickContainerId == order.pickContainerId and \
+           self._preparedOrder.pickContainerType == order.pickContainerType and \
+           self._preparedOrder.placeLocationIndex == order.placeLocationIndex and \
+           self._preparedOrder.placeContainerId == order.placeContainerId and \
+           self._preparedOrder.placeContainerType == order.placeContainerType:
+           isPrepared = True
+           self._preparedOrder = None
+
+        log.warn('running order cycle: %r, isPrepared = %r', order, isPrepared)
+        await asyncio.sleep(1)
+        if not isPrepared:
+            await asyncio.sleep(5)
+        await asyncio.sleep(5 * order.orderNumber)
         return PLCOrderCycleStatus(
             orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedOrderComplete,
             numPutInDestination = order.orderNumber,
@@ -42,7 +62,9 @@ class PLCPickWorkerBackend:
 
     async def RunPreparationCycleAsync(self, order: PLCPickWorkerOrder) -> PLCPreparationCycleStatus:
         log.debug('%r', order)
+        self._preparedOrder = None
         await asyncio.sleep(4)
+        self._preparedOrder = order
         return PLCPreparationCycleStatus(
             preparationFinishCode = PLCPreparationFinishCode.PreparationFinishedSuccess,
         )
