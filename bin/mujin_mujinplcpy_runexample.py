@@ -17,27 +17,22 @@ class Example(plcproductionrunner.PLCMaterialHandler):
         self._productionRunner = plcproductionrunner.PLCProductionRunner(plcMemory, self)
         self._controller = plccontroller.PLCController(memory, maxHeartbeatInterval=0.1)
 
-    async def MoveLocationAsync(self, locationIndex: int, containerId: str, containerType: str, orderUniqueId: str) -> typing.Tuple[str, str]:
+    async def MoveLocationAsync(self, locationIndex: int, expectedContainerId: str, expectedContainerType: str, orderUniqueId: str) -> typing.Tuple[str, str]:
         """
         when location needs moving called by mujin
         send request to agv to move, can return immediately even if agv has not started moving yet
         function should return a pair of actual containerId and containerType
         """
-        log.info('containerId = %r', containerId)
-        log.info('containerType = %r', containerType)
-        log.info('orderUniqueId = %r', orderUniqueId)
+        log.warn('moving location %d: expectedContainerId = %r, expectedContainerType = %r, orderUniqueId = %r', locationIndex, expectedContainerId, expectedContainerType, orderUniqueId)
         await asyncio.sleep(1) # for testing
-        return containerId, containerType
+        return expectedContainerId, expectedContainerType
 
-    async def FinishOrderAsync(self, orderUniqueId: str, orderFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDestination: int) -> None:
+    async def FinishOrderAsync(self, orderUniqueId: str, orderCycleFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDestination: int) -> None:
         """
         when order status changed called by mujin
         """
-        log.info('orderUniqueId = %r', orderUniqueId)
-        log.info('orderFinishCode = %r', orderFinishCode)
-        log.info('numPutInDestination = %r', numPutInDestination)
+        log.warn('finish order: orderUniqueId = %r, orderCycleFinishCode = %r, numPutInDestination = %r', orderUniqueId, orderCycleFinishCode, numPutInDestination)
         await asyncio.sleep(1) # for testing
-        return
 
     def Start(self):
         self._productionRunner.Start()

@@ -41,8 +41,14 @@ class PLCOrder(PLCDataObject):
 
     numPutInDestination = 0 # type: int
     numLeftInOrder = 0 # type: int
-    orderFinishCode = PLCOrderCycleFinishCode.FinishedNotAvailable # type: PLCOrderCycleFinishCode
+    orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedNotAvailable # type: PLCOrderCycleFinishCode
     preparationFinishCode = PLCPreparationFinishCode.PreparationNotAvailable # type: PLCPreparationFinishCode
+
+class PLCLocationRequest(PLCDataObject):
+    expectedContainerId = '' # type: str
+    expectedContainerType = '' # type: str
+    orderUniqueId = '' # type: str
+    moveLocaitonFinishCode = PLCMoveLocationFinishCode.NotAvailable # type: PLCMoveLocationFinishCode
 
 class PLCProductionCycleState(enum.Enum):
     Idle = 'idle'
@@ -95,7 +101,7 @@ class PLCProductionCycle:
     _orderCycleState = None # type: typing.Tuple[PLCOrderCycleState, float, typing.Optional[PLCOrder]] # current state and state transition timestamp and current order
     _preparationCycleState = None # type: typing.Tuple[PLCPreparationCycleState, float, typing.Optional[PLCOrder]] # current state and state transition timestamp and current order
     _queueOrderState = None # type: typing.Tuple[PLCQueueOrderState, float, typing.Optional[PLCOrder]]
-    _locationStates = None # type: typing.Dict[int, typing.Tuple[PLCLocationState, float, typing.Optional[PLCOrder]]]
+    _locationStates = None # type: typing.Dict[int, typing.Tuple[PLCLocationState, float, typing.Optional[PLCLocationRequest]]]
 
     def __init__(self, memory: plcmemory.PLCMemory, maxLocationIndex: int = 4):
         self._memory = memory
@@ -302,7 +308,7 @@ class PLCProductionCycle:
             elif not controller.GetBoolean('isRunningOrderCycle'):
                 # handle isError and orderCycleFinishCode here
                 order = self._GetOrderCycleStateOrder()
-                order.orderFinishCode = PLCOrderCycleFinishCode(controller.GetInteger('orderCycleFinishCode'))
+                order.orderCycleFinishCode = PLCOrderCycleFinishCode(controller.GetInteger('orderCycleFinishCode'))
                 order.numPutInDestination = controller.GetInteger('numPutInDestination')
                 order.numLeftInOrder = controller.GetInteger('numLeftInOrder')
                 self._SetOrderCycleState(PLCOrderCycleState.Finish, order)
@@ -311,7 +317,7 @@ class PLCProductionCycle:
             order = self._GetOrderCycleStateOrder()
             controller.SetMultiple({
                 'finishOrderOrderUniqueId': order.uniqueId,
-                'finishOrderOrderFinishCode': int(order.orderFinishCode),
+                'finishOrderOrderCycleFinishCode': int(order.orderCycleFinishCode),
                 'finishOrderNumPutInDestination': order.numPutInDestination,
                 'finishOrderNumLeftInOrder': order.numLeftInOrder,
                 'startFinishOrder': True,
@@ -458,20 +464,20 @@ class PLCProductionCycle:
     # Move Location State Machine
     #
 
-    def _SetLocationState(self, locationIndex: int, state: PLCLocationState, order: typing.Optional[PLCOrder] = None) -> None:
+    def _SetLocationState(self, locationIndex: int, state: PLCLocationState, request: typing.Optional[PLCLocationRequest] = None) -> None:
         if self._IsLocationState(locationIndex, state):
             return
         timestamp = time.monotonic()
-        log.info('location%d, %s (%r) -> %s (%r), elapsed %.03fs', locationIndex, self._locationStates[locationIndex][0], self._locationStates[locationIndex][2], state, order, timestamp - self._locationStates[locationIndex][1])
-        self._locationStates[locationIndex] = (state, timestamp, order)
+        log.info('location%d, %s (%r) -> %s (%r), elapsed %.03fs', locationIndex, self._locationStates[locationIndex][0], self._locationStates[locationIndex][2], state, request, timestamp - self._locationStates[locationIndex][1])
+        self._locationStates[locationIndex] = (state, timestamp, request)
 
     def _IsLocationState(self, locationIndex: int, state: PLCLocationState) -> bool:
         return self._locationStates[locationIndex][0] == state
 
-    def _GetLocationStateOrder(self, locationIndex: int) -> PLCOrder:
-        order = self._locationStates[locationIndex][2]
-        assert(order is not None)
-        return order
+    def _GetLocationStateRequest(self, locationIndex: int) -> PLCLocationRequest:
+        request = self._locationStates[locationIndex][2]
+        assert(request is not None)
+        return request
 
     def _RunLocationStateMachine(self, controller: plccontroller.PLCController, locationIndex: int) -> None:
         if self._IsLocationState(locationIndex, PLCLocationState.Idle):
@@ -480,56 +486,68 @@ class PLCProductionCycle:
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetLocationState(locationIndex, PLCLocationState.Stopped)
             else:
-                used = False
-                containerId = ''
-                containerType = ''
+                request = None
 
                 # location could be used by running order
                 if self._IsOrderCycleState(PLCOrderCycleState.Starting) or self._IsOrderCycleState(PLCOrderCycleState.Running):
                     order = self._GetOrderCycleStateOrder()
                     if locationIndex in (order.pickLocationIndex, order.placeLocationIndex):
-                        used = True
-                        containerId = order.pickContainerId if locationIndex == order.pickLocationIndex else order.placeContainerId
-                        containerType = order.pickContainerType if locationIndex == order.pickLocationIndex else order.placeContainerType
+                        request = PLCLocationRequest(
+                            expectedContainerId = order.pickContainerId if locationIndex == order.pickLocationIndex else order.placeContainerId,
+                            expectedContainerType = order.pickContainerType if locationIndex == order.pickLocationIndex else order.placeContainerType,
+                            orderUniqueId = order.uniqueId,
+                        )
 
                 # location could be used by preparation order
-                if not used:
+                if not request:
                     if self._IsPreparationCycleState(PLCPreparationCycleState.Starting) or self._IsPreparationCycleState(PLCPreparationCycleState.Running):
                         order = self._GetPreparationCycleStateOrder()
                         if locationIndex in (order.pickLocationIndex, order.placeLocationIndex):
-                            used = True
-                            containerId = order.pickContainerId if locationIndex == order.pickLocationIndex else order.placeContainerId
-                            containerType = order.pickContainerType if locationIndex == order.pickLocationIndex else order.placeContainerType
+                            request = PLCLocationRequest(
+                                expectedContainerId = order.pickContainerId if locationIndex == order.pickLocationIndex else order.placeContainerId,
+                                expectedContainerType = order.pickContainerType if locationIndex == order.pickLocationIndex else order.placeContainerType,
+                                orderUniqueId = order.uniqueId,
+                            )
+
+                # if no more order uses this locaiton, release it
+                # TODO: if no recent order will use this location, we can also release it
+                if not request:
+                    used = False
+                    for queue in self._locationsQueue.values():
+                        for order in queue:
+                            if locationIndex in (order.pickLocationIndex, order.placeLocationIndex):
+                                used = True
+                                break
+                    if not used:
+                        request = PLCLocationRequest()
 
                 # if the used location does not have matching container, move container
-                if used:
-                    if containerId != controller.GetString('location%dContainerId' % locationIndex) or containerType != controller.GetString('location%dContainerType' % locationIndex):
-                        self._SetLocationState(locationIndex, PLCLocationState.Move, order)
+                if request:
+                    if request.expectedContainerId != controller.GetString('location%dContainerId' % locationIndex) or \
+                       request.expectedContainerType != controller.GetString('location%dContainerType' % locationIndex):
+                        self._SetLocationState(locationIndex, PLCLocationState.Move, request)
 
         if self._IsLocationState(locationIndex, PLCLocationState.Move):
-            order = self._GetLocationStateOrder(locationIndex)
-            orderUniqueId = order.uniqueId
-            containerId = order.pickContainerId if locationIndex == order.pickLocationIndex else order.placeContainerId
-            containerType = order.pickContainerType if locationIndex == order.pickLocationIndex else order.placeContainerType
+            request = self._GetLocationStateRequest(locationIndex)
             controller.SetMultiple({
-                'moveLocation%dContainerId' % locationIndex: containerId,
-                'moveLocation%dContainerType' % locationIndex: containerType,
-                'moveLocation%dOrderUniqueId' % locationIndex: orderUniqueId,
+                'moveLocation%dExpectedContainerId' % locationIndex: request.expectedContainerId,
+                'moveLocation%dExpectedContainerType' % locationIndex: request.expectedContainerType,
+                'moveLocation%dOrderUniqueId' % locationIndex: request.orderUniqueId,
                 'startMoveLocation%d' % locationIndex: True,
             })
 
             if controller.GetBoolean('isRunningMoveLocation%d' % locationIndex):
-                self._SetLocationState(locationIndex, PLCLocationState.Moving, order)
+                self._SetLocationState(locationIndex, PLCLocationState.Moving, request)
 
 
         if self._IsLocationState(locationIndex, PLCLocationState.Moving):
             controller.Set('startMoveLocation%d' % locationIndex, False)
 
             if not controller.GetBoolean('isRunningMoveLocation%d' % locationIndex):
-                finishCode = PLCMoveLocationFinishCode(controller.GetInteger('moveLocation%dFinishCode' % locationIndex))
+                request = self._GetLocationStateRequest(locationIndex)
+                request.moveLocaitonFinishCode = PLCMoveLocationFinishCode(controller.GetInteger('moveLocation%dFinishCode' % locationIndex))
                 # TODO: check finish code and set next state based on that
-                order = self._GetLocationStateOrder(locationIndex)
-                self._SetLocationState(locationIndex, PLCLocationState.Moved, order)
+                self._SetLocationState(locationIndex, PLCLocationState.Moved, request)
 
         if self._IsLocationState(locationIndex, PLCLocationState.Moved):
             controller.Set('startMoveLocation%d' % locationIndex, False)

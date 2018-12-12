@@ -17,15 +17,15 @@ class PLCMaterialHandler:
     To be subclassed and implemented by customer.
     """
 
-    async def MoveLocationAsync(self, locationIndex: int, containerId: str, containerType: str, orderUniqueId: str) -> typing.Tuple[str, str]:
+    async def MoveLocationAsync(self, locationIndex: int, expectedContainerId: str, expectedContainerType: str, orderUniqueId: str) -> typing.Tuple[str, str]:
         """
         when location needs moving called by mujin
         send request to agv to move, can return immediately even if agv has not started moving yet
         function should return a pair of actual containerId and containerType
         """
-        return containerId, containerType
+        return expectedContainerId, expectedContainerType
 
-    async def FinishOrderAsync(self, orderUniqueId: str, orderFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDestination: int) -> None:
+    async def FinishOrderAsync(self, orderUniqueId: str, orderCycleFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDestination: int) -> None:
         """
         when order status changed called by mujin
         """
@@ -246,8 +246,8 @@ class PLCProductionRunner:
                 return
 
             # first garther parameters
-            containerId = controller.GetString('moveLocation%dContainerId' % locationIndex)
-            containerType = controller.GetString('moveLocation%dContainerType' % locationIndex)
+            expectedContainerId = controller.GetString('moveLocation%dExpectedContainerId' % locationIndex)
+            expectedContainerType = controller.GetString('moveLocation%dExpectedContainerType' % locationIndex)
             orderUniqueId = controller.GetString('moveLocation%dOrderUniqueId' % locationIndex)
 
             # set output signals first
@@ -260,7 +260,7 @@ class PLCProductionRunner:
             })
 
             # run customer code
-            actualContainerId, actualContainerType = loop.run_until_complete(self._materialHandler.MoveLocationAsync(locationIndex, containerId, containerType, orderUniqueId))
+            actualContainerId, actualContainerType = loop.run_until_complete(self._materialHandler.MoveLocationAsync(locationIndex, expectedContainerId, expectedContainerType, orderUniqueId))
 
             controller.WaitUntil('startMoveLocation%d' % locationIndex, False)
 
@@ -293,7 +293,7 @@ class PLCProductionRunner:
 
             # first garther parameters
             orderUniqueId = controller.GetString('finishOrderOrderUniqueId')
-            orderFinishCode = plclogic.PLCOrderCycleFinishCode(controller.GetInteger('finishOrderOrderFinishCode'))
+            orderCycleFinishCode = plclogic.PLCOrderCycleFinishCode(controller.GetInteger('finishOrderOrderCycleFinishCode'))
             numPutInDestination = controller.GetInteger('finishOrderNumPutInDestination')
 
             # set output signals first
@@ -303,7 +303,7 @@ class PLCProductionRunner:
             })
 
             # run customer code
-            loop.run_until_complete(self._materialHandler.FinishOrderAsync(orderUniqueId, orderFinishCode, numPutInDestination))
+            loop.run_until_complete(self._materialHandler.FinishOrderAsync(orderUniqueId, orderCycleFinishCode, numPutInDestination))
 
             controller.WaitUntil('startFinishOrder', False)
 
