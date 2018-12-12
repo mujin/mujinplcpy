@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import sys
 import typing
 import asyncio
 
@@ -57,8 +58,28 @@ class Example(plcproductionrunner.PLCMaterialHandler):
             placeContainerId = 'pallet1',
         ))
 
+def ConfigureLogging(logLevel=logging.DEBUG, outputStream=sys.stderr):
+    handler = logging.StreamHandler(outputStream)
+    try:
+        import logutils.colorize
+        handler = logutils.colorize.ColorizingStreamHandler(outputStream)
+        handler.level_map[logging.DEBUG] = (None, 'green', False)
+        handler.level_map[logging.INFO] = (None, None, False)
+        handler.level_map[logging.WARNING] = (None, 'yellow', False)
+        handler.level_map[logging.ERROR] = (None, 'red', False)
+        handler.level_map[logging.CRITICAL] = ('white', 'magenta', True)
+    except ImportError:
+        pass
+    handler.setFormatter(logging.Formatter('%(asctime)s %(name)s [%(levelname)s] [%(filename)s:%(lineno)s %(funcName)s] %(message)s'))
+    handler.setLevel(logLevel)
+
+    root = logging.getLogger()
+    root.setLevel(logLevel)
+    root.handlers = []
+    root.addHandler(handler)
+
 if __name__ == '__main__':
-    logging.basicConfig(format='%(asctime)s %(name)s [%(levelname)s] [%(filename)s:%(lineno)s %(funcName)s] %(message)s', level=logging.DEBUG)
+    ConfigureLogging()
 
     # have one plc memory per MUJIN controller
     memory = plcmemory.PLCMemory()
@@ -77,10 +98,10 @@ if __name__ == '__main__':
     # start a network server instance for MUJIN controllers to connect to
     server = plcserver.PLCServer(memory, 'tcp://*:5555')
     server.Start()
-    log.info('server started.')
+    log.warn('server started.')
 
     example.WaitUntilConnected()
-    log.info('connected.')
+    log.warn('connected.')
 
     example.QueueOrders()
 
@@ -89,9 +110,9 @@ if __name__ == '__main__':
     input('Press ENTER to stop.\n')
 
     # stop everything
-    log.info('stopping.')
+    log.warn('stopping.')
     server.Stop()
     example.Stop()
     if productionCycle:
         productionCycle.Stop()
-    log.info('stopped.')
+    log.warn('stopped.')

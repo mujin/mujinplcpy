@@ -6,7 +6,7 @@ import time
 import enum
 
 from . import plcmemory, plccontroller
-from .plcproductionrunner import PLCMoveLocationFinishCode, PLCQueueOrderFinishCode, PLCFinishOrderFinishCode
+from .plcproductionrunner import PLCMoveLocationFinishCode, PLCQueueOrderFinishCode, PLCFinishOrderFinishCode, PLCProductionCycleFinishCode
 from .plclogic import PLCOrderCycleFinishCode, PLCPreparationFinishCode
 from . import PLCDataObject
 
@@ -70,18 +70,18 @@ class PLCPreparationCycleState(enum.Enum):
     Stopping = 'stopping'
     Stopped = 'stopped'
 
-class PLCQueueOrderState(enum.Enum):
-    Idle = 'idle'
-    Running = 'running'
-    Succeeded = 'succeeded'
-    Stopped = 'stopped'
-
 class PLCLocationState(enum.Enum):
     Idle = 'idle'
     Move = 'move'
     Moving = 'moving'
     Moved = 'moved'
     Stopped = 'stopped'
+
+class PLCQueueOrderState(enum.Enum):
+    Idle = 'idle'
+    Running = 'running'
+    Succeeded = 'succeeded'
+    Disabled = 'disabled'
 
 class PLCProductionCycle:
     
@@ -102,14 +102,15 @@ class PLCProductionCycle:
         for locationIndex in self._locationIndices:
             self._locationsQueue[locationIndex] = []
 
+        # initialize the states
         timestamp = time.monotonic()
         self._state = (PLCProductionCycleState.Idle, timestamp)
         self._orderCycleState = (PLCOrderCycleState.Idle, timestamp, None)
         self._preparationCycleState = (PLCPreparationCycleState.Idle, timestamp, None)
-        self._queueOrderState = (PLCQueueOrderState.Idle, timestamp, None)
         self._locationStates = {}
         for locationIndex in self._locationIndices:
-            self._locationStates[locationIndex] = (PLCLocationState.Idle, timestamp, None)
+            self._locationStates[locationIndex] = (PLCLocationState.Stopped, timestamp, None)
+        self._queueOrderState = (PLCQueueOrderState.Disabled, timestamp, None)
 
     def __del__(self):
         self.Stop()
@@ -149,7 +150,7 @@ class PLCProductionCycle:
         if self._IsState(state):
             return
         timestamp = time.monotonic()
-        log.debug('%s -> %s, previous state lasted %.03fs', self._state[0], state, timestamp - self._state[1])
+        log.info('%s -> %s, elapsed %.03fs', self._state[0], state, timestamp - self._state[1])
         self._state = (state, timestamp)
 
     def _IsState(self, state: PLCProductionCycleState) -> bool:
@@ -161,21 +162,29 @@ class PLCProductionCycle:
         if self._IsState(PLCProductionCycleState.Idle):
             controller.Set('isRunningProductionCycle', False)
 
-            if controller.GetBoolean('startProductionCycle'):
+            if controller.GetBoolean('startProductionCycle') and not controller.GetBoolean('stopProductionCycle'):
                 self._SetState(PLCProductionCycleState.Starting)
         
         # once startProductionCycle triggered
         # we wait for the trigger to go down first
         # before actually running any processing
         if self._IsState(PLCProductionCycleState.Starting):
-            controller.Set('isRunningProductionCycle', True)
+            controller.SetMultiple({
+                'isRunningProductionCycle': True,
+                'productionCycleFinishCode': int(PLCProductionCycleFinishCode.NotAvailable),
+            })
 
-            if not controller.GetBoolean('startProductionCycle'):
+            if controller.GetBoolean('stopProductionCycle'):
+                self._SetState(PLCProductionCycleState.Stopping)
+            elif not controller.GetBoolean('startProductionCycle'):
                 self._SetState(PLCProductionCycleState.Running)
         
-        # this is the idle state, when the production cycle has started
+        # this is the main running state, when the production cycle has started
         if self._IsState(PLCProductionCycleState.Running):
-            controller.Set('isRunningProductionCycle', True)
+            controller.SetMultiple({
+                'isRunningProductionCycle': True,
+                'productionCycleFinishCode': int(PLCProductionCycleFinishCode.NotAvailable),
+            })
 
             if controller.GetBoolean('stopProductionCycle'):
                 self._SetState(PLCProductionCycleState.Stopping)
@@ -183,25 +192,31 @@ class PLCProductionCycle:
         # when stop is requested, we first need to cleanup
         # when everything is stopped, we can then transition to stopping state
         if self._IsState(PLCProductionCycleState.Stopping):
-            controller.Set('isRunningProductionCycle', True)
+            controller.SetMultiple({
+                'isRunningProductionCycle': True,
+                'productionCycleFinishCode': int(PLCProductionCycleFinishCode.NotAvailable),
+            })
 
-            # TODO: need to have stopped state for queueOrder and moveLocation state machines too
+            # check if everything is stopped, then transition to stopped state
             allFinished = True
             if not self._IsOrderCycleState(PLCOrderCycleState.Stopped):
                 allFinished = False
             if not self._IsPreparationCycleState(PLCPreparationCycleState.Stopped):
                 allFinished = False
-            if not self._IsQueueOrderState(PLCQueueOrderState.Stopped):
-                allFinished = False
             for locationIndex in self._locationIndices:
                 if not self._IsLocationState(locationIndex, PLCLocationState.Stopped):
                     allFinished = False
+            if not self._IsQueueOrderState(PLCQueueOrderState.Disabled):
+                allFinished = False
             if allFinished:
                 self._SetState(PLCProductionCycleState.Stopped)
 
         # when we receive stopProductionCycle, we need to wait for trigger to go down
         if self._IsState(PLCProductionCycleState.Stopped):
-            controller.Set('isRunningProductionCycle', False)
+            controller.SetMultiple({
+                'isRunningProductionCycle': False,
+                'productionCycleFinishCode': int(PLCProductionCycleFinishCode.Success),
+            })
 
             if not controller.GetBoolean('stopProductionCycle'):
                 self._SetState(PLCProductionCycleState.Idle)
@@ -214,7 +229,7 @@ class PLCProductionCycle:
         if self._IsOrderCycleState(state):
             return
         timestamp = time.monotonic()
-        log.debug('%s (%r) -> %s (%r), previous state lasted %.03fs', self._orderCycleState[0], self._orderCycleState[2], state, order, timestamp - self._orderCycleState[1])
+        log.info('%s (%r) -> %s (%r), elapsed %.03fs', self._orderCycleState[0], self._orderCycleState[2], state, order, timestamp - self._orderCycleState[1])
         self._orderCycleState = (state, timestamp, order)
 
     def _IsOrderCycleState(self, state: PLCOrderCycleState) -> bool:
@@ -334,7 +349,7 @@ class PLCProductionCycle:
         if self._IsPreparationCycleState(state):
             return
         timestamp = time.monotonic()
-        log.debug('%s (%r) -> %s (%r), previous state lasted %.03fs', self._preparationCycleState[0], self._preparationCycleState[2], state, order, timestamp - self._preparationCycleState[1])
+        log.info('%s (%r) -> %s (%r), elapsed %.03fs', self._preparationCycleState[0], self._preparationCycleState[2], state, order, timestamp - self._preparationCycleState[1])
         self._preparationCycleState = (state, timestamp, order)
 
     def _IsPreparationCycleState(self, state: PLCPreparationCycleState) -> bool:
@@ -391,7 +406,7 @@ class PLCProductionCycle:
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
             elif not controller.GetBoolean('isRunningPreparation'):
-                # handle isError and orderCycleFinishCode here
+                # TODO: handle isError and orderCycleFinishCode here
                 order = self._GetOrderCycleStateOrder()
                 order.preparationFinishCode = PLCPreparationFinishCode(controller.GetInteger('preparationFinishCode'))
                 if order.preparationFinishCode == PLCPreparationFinishCode.PreparationFinishedSuccess:
@@ -429,7 +444,7 @@ class PLCProductionCycle:
         if self._IsLocationState(locationIndex, state):
             return
         timestamp = time.monotonic()
-        log.debug('location%d, %s (%r) -> %s (%r), previous state lasted %.03fs', locationIndex, self._locationStates[locationIndex][0], self._locationStates[locationIndex][2], state, order, timestamp - self._locationStates[locationIndex][1])
+        log.info('location%d, %s (%r) -> %s (%r), elapsed %.03fs', locationIndex, self._locationStates[locationIndex][0], self._locationStates[locationIndex][2], state, order, timestamp - self._locationStates[locationIndex][1])
         self._locationStates[locationIndex] = (state, timestamp, order)
 
     def _IsLocationState(self, locationIndex: int, state: PLCLocationState) -> bool:
@@ -520,7 +535,7 @@ class PLCProductionCycle:
         if self._IsQueueOrderState(state):
             return
         timestamp = time.monotonic()
-        log.debug('%s (%r) -> %s (%r), previous state lasted %.03fs', self._queueOrderState[0], self._queueOrderState[2], state, order, timestamp - self._queueOrderState[1])
+        log.info('%s (%r) -> %s (%r), elapsed %.03fs', self._queueOrderState[0], self._queueOrderState[2], state, order, timestamp - self._queueOrderState[1])
         self._queueOrderState = (state, timestamp, order)
 
     def _IsQueueOrderState(self, state: PLCQueueOrderState) -> bool:
@@ -537,7 +552,7 @@ class PLCProductionCycle:
             controller.Set('isRunningQueueOrder', False)
 
             if not self._IsState(PLCProductionCycleState.Running):
-                self._SetQueueOrderState(PLCQueueOrderState.Stopped)
+                self._SetQueueOrderState(PLCQueueOrderState.Disabled)
             elif controller.GetBoolean('startQueueOrder'):
                 order = PLCOrder(
                     uniqueId = controller.GetString('queueOrderUniqueId'),
@@ -576,7 +591,7 @@ class PLCProductionCycle:
                 order = self._GetQueueOrderStateOrder()
                 self._locationsQueue[order.pickLocationIndex].append(order)
                 self._SetQueueOrderState(PLCQueueOrderState.Succeeded)
-                log.debug('order queued: %r', order)
+                log.warn('order queued on production cycle: %r', order)
 
         # succeeded queuing, need to set finish code
         if self._IsQueueOrderState(PLCQueueOrderState.Succeeded):
@@ -585,12 +600,12 @@ class PLCProductionCycle:
                 'queueOrderFinishCode': int(PLCQueueOrderFinishCode.Success),
             })
             if not self._IsState(PLCProductionCycleState.Running):
-                self._SetQueueOrderState(PLCQueueOrderState.Stopped)
+                self._SetQueueOrderState(PLCQueueOrderState.Disabled)
             else:
                 self._SetQueueOrderState(PLCQueueOrderState.Idle)
 
-        # functionality stopped because of main cycle state
-        if self._IsQueueOrderState(PLCQueueOrderState.Stopped):
+        # functionality disabled because of main cycle state
+        if self._IsQueueOrderState(PLCQueueOrderState.Disabled):
             controller.Set('isRunningQueueOrder', False)
 
             if self._IsState(PLCProductionCycleState.Running):

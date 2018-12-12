@@ -56,6 +56,14 @@ class PLCQueueOrderParameters(PLCDataObject):
     packInputPartIndex = 0 # type: int # when using packFormation, index of the part in the pack
     packFormationComputationName = '' # type: str # when using packFormation, name of the formation
 
+class PLCProductionCycleFinishCode(enum.IntEnum):
+    """
+    Finish code for the whole production cycle.
+    """
+    NotAvailable = 0x0000
+    Success = 0x0001
+    GenericError = 0xffff
+
 class PLCQueueOrderFinishCode(enum.IntEnum):
     """
     Finish code for queueOrder signal.
@@ -156,7 +164,7 @@ class PLCProductionRunner:
             finishCode = PLCQueueOrderFinishCode(controller.GetInteger('queueOrderFinishCode'))
             if finishCode != PLCQueueOrderFinishCode.Success:
                 raise Exception('QueueOrder failed with finish code: %r' % finishCode)
-            log.debug('QueueOrder %s succeeded', orderUniqueId)
+            log.warn('successfully queued order: %s: %r', orderUniqueId, queueOrderParameters)
         finally:
             controller.Set('startQueueOrder', False)
 
