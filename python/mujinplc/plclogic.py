@@ -135,6 +135,7 @@ class PLCPreparationCycleStatus(PLCDataObject):
     preparationFinishCode = PLCPreparationFinishCode.PreparationNotAvailable # type: PLCPreparationFinishCode # finish code of preparation cycle
 
 class PLCStartPreparationCycleParameters(PLCDataObject):
+    uniqueId = '' # type: str
     partType = '' # type: str # type of the product to be picked, for example: "cola"
     orderNumber = 0 # type: int # number of items to be picked, for example: 1
     robotName = '' # type: str
@@ -148,9 +149,10 @@ class PLCStartPreparationCycleParameters(PLCDataObject):
     placeContainerType = '' # type: str # type of the source container, if all the same, set to ""
 
 class PLCStartOrderCycleParameters(PLCDataObject):
+    uniqueId = '' # type: str
     partType = '' # type: str # type of the product to be picked, for example: "cola"
     orderNumber = 0 # type: int # number of items to be picked, for example: 1
-    robotName = 0 # type: str
+    robotName = '' # type: str
 
     pickLocationIndex = 0 # type: int # index of location for source container, location defined on mujin pendant
     pickContainerId = '' # type: str # barcode of the source container, for example: "010023"
@@ -241,6 +243,7 @@ class PLCLogic:
         Start order cycle. Block until MUJIN controller acknowledge the start command.
         """
         self._controller.SetMultiple({
+            'orderUniqueId': startOrderCycleParameters.uniqueId,
             'orderPartType': startOrderCycleParameters.partType,
             'orderNumber': startOrderCycleParameters.orderNumber,
             'orderRobotName': startOrderCycleParameters.robotName,
@@ -403,6 +406,7 @@ class PLCLogic:
         Start preparation cycle. Block until MUJIN controller acknowledge the start command.
         """
         self._controller.SetMultiple({
+            'preparationUniqueId': startPreparationCycleParameters.uniqueId,
             'preparationPartType': startPreparationCycleParameters.partType,
             'preparationOrderNumber': startPreparationCycleParameters.orderNumber,
             'preparationRobotName': startPreparationCycleParameters.robotName,
