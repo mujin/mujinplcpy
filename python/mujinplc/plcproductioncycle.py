@@ -1,5 +1,13 @@
 # -*- coding: utf-8 -*-
 
+# TODO:
+# - [ ] check isModeAuto
+# - [ ] check isSystemReady
+# - [ ] check isCycleReady
+# - [ ] handle isError
+# - [ ] stop productionCycle with error
+# - [ ] add state timeouts
+
 import threading
 import typing
 import time
@@ -43,6 +51,7 @@ class PLCOrder(PLCDataObject):
     numLeftInOrder = 0 # type: int
     orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedNotAvailable # type: PLCOrderCycleFinishCode
     preparationFinishCode = PLCPreparationFinishCode.PreparationNotAvailable # type: PLCPreparationFinishCode
+    finishOrderFinishCode = PLCFinishOrderFinishCode.NotAvailable # type: PLCFinishOrderFinishCode
 
     pickContainer = None # type: typing.Optional[PLCContainer]
     placeContainer = None # type: typing.Optional[PLCContainer]
@@ -269,6 +278,9 @@ class PLCProductionCycle:
         if self._IsOrderCycleState(PLCOrderCycleState.Idle):
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetOrderCycleState(PLCOrderCycleState.Stopping)
+            elif not controller.GetBoolean('isModeAuto') or not controller.GetBoolean('isSystemReady') or not controller.GetBoolean('isCycleReady'):
+                # need to wait until starting condition is met
+                pass
             elif self._IsPreparationCycleState(PLCPreparationCycleState.Starting, PLCPreparationCycleState.Running):
                 # if preparation is running, need to wait for it to finish
                 pass
@@ -310,7 +322,7 @@ class PLCProductionCycle:
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetOrderCycleState(PLCOrderCycleState.Stopping)
             elif controller.GetBoolean('isRunningOrderCycle'):
-                # prepared order is not used and cannot be used again
+                # prepared order is now used and cannot be used again
                 if self._lastPreparedOrder is order:
                     self._lastPreparedOrder = None
                 self._SetOrderCycleState(PLCOrderCycleState.Running, order)
@@ -344,11 +356,11 @@ class PLCProductionCycle:
             controller.Set('startFinishOrder', False)
 
             if not controller.GetBoolean('isRunningFinishOrder'):
-                finishCode = PLCFinishOrderFinishCode(controller.GetInteger('finishOrderFinishCode'))
+                order = self._GetOrderCycleStateOrder()
+                order.finishOrderFinishCode = PLCFinishOrderFinishCode(controller.GetInteger('finishOrderFinishCode'))
                 # TODO: check finishCode and stop the whole production cycle?
 
                 # remove order from queue
-                order = self._GetOrderCycleStateOrder()
                 self._ordersQueue.remove(order)
                 if order.pickContainer:
                     order.pickContainer.orders.remove(order)
@@ -406,6 +418,9 @@ class PLCProductionCycle:
         if self._IsPreparationCycleState(PLCPreparationCycleState.Idle):
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
+            elif not controller.GetBoolean('isModeAuto') or not controller.GetBoolean('isSystemReady'):
+                # need to wait until starting condition is met
+                pass
             elif not self._IsOrderCycleState(PLCOrderCycleState.Starting):
                 # when the order cycle is nost just starting, we can consider whether to start next preparation
 

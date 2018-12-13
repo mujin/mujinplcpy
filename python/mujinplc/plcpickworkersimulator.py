@@ -166,6 +166,12 @@ class PLCPickWorkerSimulator:
     def _RunThread(self) -> None:
         controller = plccontroller.PLCController(self._memory)
 
+        controller.SetMultiple({
+            'isModeAuto': True,
+            'isSystemReady':  True,
+            'isCycleReady': True,
+        })
+
         while self._isok:
             controller.Wait(timeout=0.1)
 
@@ -194,6 +200,12 @@ class PLCPickWorkerSimulator:
                     thread = threading.Thread(target=target, name=triggerSignal)
                     thread.start()
                     self._threads[triggerSignal] = thread
+
+        controller.SetMultiple({
+            'isModeAuto': False,
+            'isSystemReady':  False,
+            'isCycleReady': False,
+        })
 
     def _RunResetErrorThread(self) -> None:
         loop = asyncio.new_event_loop()
