@@ -62,6 +62,42 @@ class Example(plcproductionrunner.PLCMaterialHandler):
             placeContainerId = 'pallet1',
         ))
 
+        self._productionRunner.QueueOrder('ORDER #3', plcproductionrunner.PLCQueueOrderParameters(
+            partType = 'milk',
+            orderNumber = 1,
+            pickLocationIndex = 1,
+            pickContainerId = '0003',
+            placeLocationIndex = 3,
+            placeContainerId = 'pallet1',
+        ))
+
+        self._productionRunner.QueueOrder('ORDER #4', plcproductionrunner.PLCQueueOrderParameters(
+            partType = 'juice',
+            orderNumber = 1,
+            pickLocationIndex = 2,
+            pickContainerId = '0004',
+            placeLocationIndex = 3,
+            placeContainerId = 'pallet2',
+        ))
+
+        self._productionRunner.QueueOrder('ORDER #5', plcproductionrunner.PLCQueueOrderParameters(
+            partType = 'sprite',
+            orderNumber = 1,
+            pickLocationIndex = 1,
+            pickContainerId = '0005',
+            placeLocationIndex = 3,
+            placeContainerId = 'pallet1',
+        ))
+
+        self._productionRunner.QueueOrder('ORDER #6', plcproductionrunner.PLCQueueOrderParameters(
+            partType = 'water',
+            orderNumber = 1,
+            pickLocationIndex = 2,
+            pickContainerId = '0006',
+            placeLocationIndex = 3,
+            placeContainerId = 'pallet2',
+        ))
+
 def ConfigureLogging(logLevel=logging.DEBUG, outputStream=sys.stderr):
     handler = logging.StreamHandler(outputStream)
     try:

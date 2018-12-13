@@ -18,6 +18,6 @@ class PLCDataObject:
         kwargs = [
             '%s=%r' % (key, getattr(self, key))
             for key in dir(self.__class__)
-            if not key.startswith('_') and getattr(self, key) != getattr(self.__class__, key) and not isinstance(getattr(self, key), (list, set))
+            if not key.startswith('_') and getattr(self, key) != getattr(self.__class__, key) and not isinstance(getattr(self, key), (list, set, PLCDataObject))
         ]
         return '<%s(%s)>' % (name, ', '.join(kwargs))
