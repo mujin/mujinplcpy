@@ -44,12 +44,21 @@ class Example(plcproductionrunner.PLCMaterialHandler):
         self._controller.WaitUntilConnected()
 
     def QueueOrders(self) -> None:
-        self._productionRunner.QueueOrder('a', plcproductionrunner.PLCQueueOrderParameters(
+        self._productionRunner.QueueOrder('ORDER #1', plcproductionrunner.PLCQueueOrderParameters(
             partType = 'cola',
             orderNumber = 1,
             pickLocationIndex = 1,
             pickContainerId = '0001',
-            placeLocationIndex = 2,
+            placeLocationIndex = 3,
+            placeContainerId = 'pallet1',
+        ))
+
+        self._productionRunner.QueueOrder('ORDER #2', plcproductionrunner.PLCQueueOrderParameters(
+            partType = 'pepsi',
+            orderNumber = 1,
+            pickLocationIndex = 2,
+            pickContainerId = '0002',
+            placeLocationIndex = 3,
             placeContainerId = 'pallet1',
         ))
 

@@ -95,7 +95,7 @@ class PLCPickWorkerBackend:
 
         self._preparedOrder = None
 
-        log.debug('running preparation: %r', order)
+        log.warn('running preparation: %r', order)
         while True:
             await asyncio.sleep(0.2)
             controller.Sync()

@@ -78,7 +78,6 @@ class PLCOrderCycleState(enum.Enum):
     Idle = 'idle'
     Starting = 'starting'
     Running = 'running'
-    Error = 'error'
     Finish = 'finish'
     Finishing = 'finishing'
     Finished = 'finished'
@@ -89,8 +88,6 @@ class PLCPreparationCycleState(enum.Enum):
     Idle = 'idle'
     Starting = 'starting'
     Running = 'running'
-    Prepared = 'prepared'
-    Error = 'error'
     Stopping = 'stopping'
     Stopped = 'stopped'
 
@@ -120,6 +117,7 @@ class PLCProductionCycle:
     _preparationCycleState = None # type: typing.Tuple[PLCPreparationCycleState, float, typing.Optional[PLCOrder]] # current state and state transition timestamp and current order
     _queueOrderState = None # type: typing.Tuple[PLCQueueOrderState, float, typing.Optional[PLCOrder]]
     _locationStates = None # type: typing.Dict[int, typing.Tuple[PLCLocationState, float, typing.Optional[PLCLocationRequest]]]
+    _lastPreparedOrder = None # type: typing.Optional[PLCOrder]
 
     def __init__(self, memory: plcmemory.PLCMemory, maxLocationIndex: int = 4):
         self._memory = memory
@@ -180,8 +178,8 @@ class PLCProductionCycle:
         log.info('%s -> %s, elapsed %.03fs', self._state[0], state, timestamp - self._state[1])
         self._state = (state, timestamp)
 
-    def _IsState(self, state: PLCProductionCycleState) -> bool:
-        return self._state[0] == state
+    def _IsState(self, *states: PLCProductionCycleState) -> bool:
+        return self._state[0] in states
 
     def _RunStateMachine(self, controller: plccontroller.PLCController) -> None:
         # we start out in the Stopped state
@@ -259,8 +257,8 @@ class PLCProductionCycle:
         log.info('%s (%r) -> %s (%r), elapsed %.03fs', self._orderCycleState[0], self._orderCycleState[2], state, order, timestamp - self._orderCycleState[1])
         self._orderCycleState = (state, timestamp, order)
 
-    def _IsOrderCycleState(self, state: PLCOrderCycleState) -> bool:
-        return self._orderCycleState[0] == state
+    def _IsOrderCycleState(self, *states: PLCOrderCycleState) -> bool:
+        return self._orderCycleState[0] in states
 
     def _GetOrderCycleStateOrder(self) -> PLCOrder:
         order = self._orderCycleState[2]
@@ -276,16 +274,20 @@ class PLCProductionCycle:
                 pass
             else:
                 order = None
-                if self._IsPreparationCycleState(PLCPreparationCycleState.Prepared):
-                    order = self._GetPreparationCycleStateOrder()
+                if self._lastPreparedOrder is not None and self._lastPreparedOrder in self._ordersQueue:
+                    order = self._lastPreparedOrder
                     # TODO: check that we can execute prepared order
-                # if not order:
-                #     candidates = []
-                #     for locationIndex in self._locationIndices:
-                #         if self._locationsQueue[locationIndex]:
-                #             candidates.append(self._locationsQueue[locationIndex][0])
-                #     if candidates:
-                #         order = candidates[0]
+                if not order:
+                    candidates = [] # type: typing.List[PLCOrder]
+                    for queue in self._locationsQueue.values():
+                        if queue:
+                            candidates += queue[0].orders
+                    if candidates:
+                        # pick candidate based on the ordering of the orders that came in
+                        for candidate in self._ordersQueue:
+                            if candidate in candidates:
+                                order = candidate
+                                break
 
                 if order:
                     self._SetOrderCycleState(PLCOrderCycleState.Starting, order)
@@ -399,8 +401,8 @@ class PLCProductionCycle:
         log.info('%s (%r) -> %s (%r), elapsed %.03fs', self._preparationCycleState[0], self._preparationCycleState[2], state, order, timestamp - self._preparationCycleState[1])
         self._preparationCycleState = (state, timestamp, order)
 
-    def _IsPreparationCycleState(self, state: PLCPreparationCycleState) -> bool:
-        return self._preparationCycleState[0] == state
+    def _IsPreparationCycleState(self, *states: PLCPreparationCycleState) -> bool:
+        return self._preparationCycleState[0] in states
 
     def _GetPreparationCycleStateOrder(self) -> PLCOrder:
         order = self._preparationCycleState[2]
@@ -411,14 +413,45 @@ class PLCProductionCycle:
         if self._IsPreparationCycleState(PLCPreparationCycleState.Idle):
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
-            elif self._IsOrderCycleState(PLCOrderCycleState.Running):
-                # when the order cycle is running, we can consider whether to start next preparation
-                order = None # TODO: self._SelectNextOrder()
-                if order:
-                    self._SetPreparationCycleState(PLCPreparationCycleState.Starting, order)
+            elif not self._IsOrderCycleState(PLCOrderCycleState.Starting):
+                # when the order cycle is nost just starting, we can consider whether to start next preparation
+
+                # see if we have a current running order
+                currentOrder = None
+                if self._IsOrderCycleState(PLCOrderCycleState.Running, PLCOrderCycleState.Finish, PLCOrderCycleState.Finishing, PLCOrderCycleState.Finished):
+                    currentOrder = self._GetOrderCycleStateOrder()
+
+                # gather all the candidates
+                availableCandidates = [] # type: typing.List[PLCOrder]
+                pickableCandidates = [] # type: typing.List[PLCOrder]
+                placeableCandidates = [] # type: typing.List[PLCOrder]
+                unavailableCandidates = [] # type: typing.List[PLCOrder]
+                for queue in self._locationsQueue.values():
+                    if not queue:
+                        continue
+                    for order in queue[0].orders:
+                        if not currentOrder:
+                            availableCandidates.append(order)
+                            continue
+                        if order is currentOrder:
+                            continue
+                        if order.pickLocationIndex != currentOrder.pickLocationIndex and order.placeLocationIndex != currentOrder.placeLocationIndex:
+                            availableCandidates.append(order)
+                        elif order.pickLocationIndex != currentOrder.pickLocationIndex:
+                            pickableCandidates.append(order)
+                        elif order.placeLocationIndex != currentOrder.placeLocationIndex:
+                            placeableCandidates.append(order)
+                        else:
+                            unavailableCandidates.append(order)
+
+                # TODO: within each category of candidates, need to order them based on incoming order
+                candidates = availableCandidates + pickableCandidates + placeableCandidates + unavailableCandidates
+                if candidates and candidates[0] is not self._lastPreparedOrder:
+                    self._lastPreparedOrder = None
+                    self._SetPreparationCycleState(PLCPreparationCycleState.Starting, candidates[0])
 
         if self._IsPreparationCycleState(PLCPreparationCycleState.Starting):
-            order = self._GetOrderCycleStateOrder()
+            order = self._GetPreparationCycleStateOrder()
             controller.SetMultiple({
                 'preparationUniqueId': order.uniqueId,
 
@@ -454,16 +487,10 @@ class PLCProductionCycle:
                 self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
             elif not controller.GetBoolean('isRunningPreparation'):
                 # TODO: handle isError and orderCycleFinishCode here
-                order = self._GetOrderCycleStateOrder()
+                order = self._GetPreparationCycleStateOrder()
                 order.preparationFinishCode = PLCPreparationFinishCode(controller.GetInteger('preparationFinishCode'))
-                if order.preparationFinishCode == PLCPreparationFinishCode.PreparationFinishedSuccess:
-                    self._SetPreparationCycleState(PLCPreparationCycleState.Prepared, order)
-                else:
-                    self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
-
-        if self._IsPreparationCycleState(PLCPreparationCycleState.Prepared):
-            # TODO: need to wait until the order is used to continue
-            self._SetPreparationCycleState(PLCPreparationCycleState.Stopped)
+                self._lastPreparedOrder = order
+                self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
 
         if self._IsPreparationCycleState(PLCPreparationCycleState.Stopping):
             controller.SetMultiple({
@@ -494,8 +521,8 @@ class PLCProductionCycle:
         log.info('location%d, %s (%r) -> %s (%r), elapsed %.03fs', locationIndex, self._locationStates[locationIndex][0], self._locationStates[locationIndex][2], state, request, timestamp - self._locationStates[locationIndex][1])
         self._locationStates[locationIndex] = (state, timestamp, request)
 
-    def _IsLocationState(self, locationIndex: int, state: PLCLocationState) -> bool:
-        return self._locationStates[locationIndex][0] == state
+    def _IsLocationState(self, locationIndex: int, *states: PLCLocationState) -> bool:
+        return self._locationStates[locationIndex][0] in states
 
     def _GetLocationStateRequest(self, locationIndex: int) -> PLCLocationRequest:
         request = self._locationStates[locationIndex][2]
@@ -577,8 +604,8 @@ class PLCProductionCycle:
         log.info('%s (%r) -> %s (%r), elapsed %.03fs', self._queueOrderState[0], self._queueOrderState[2], state, order, timestamp - self._queueOrderState[1])
         self._queueOrderState = (state, timestamp, order)
 
-    def _IsQueueOrderState(self, state: PLCQueueOrderState) -> bool:
-        return self._queueOrderState[0] == state
+    def _IsQueueOrderState(self, *states: PLCQueueOrderState) -> bool:
+        return self._queueOrderState[0] in states
 
     def _GetQueueOrderStateOrder(self) -> PLCOrder:
         order = self._queueOrderState[2]
