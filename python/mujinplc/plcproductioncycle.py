@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 class PLCOrder(PLCDataObject):
     """
-    Struct describing order data. This PLCOrder class is used internally.
+    Struct describing order data. Used internally.
     """
     uniqueId = '' # type: str
 
@@ -43,6 +43,23 @@ class PLCOrder(PLCDataObject):
     numLeftInOrder = 0 # type: int
     orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedNotAvailable # type: PLCOrderCycleFinishCode
     preparationFinishCode = PLCPreparationFinishCode.PreparationNotAvailable # type: PLCPreparationFinishCode
+
+    pickContainer = None # type: typing.Optional[PLCContainer]
+    placeContainer = None # type: typing.Optional[PLCContainer]
+
+class PLCContainer(PLCDataObject):
+    """
+    Struct describing a container on queue at a location. Used internally.
+    """
+    orders = None # type: typing.List[PLCOrder]
+
+    locationIndex = 0 # type: int
+    containerId = '' # type: str
+    containerType = '' # type: str
+
+    def __init__(self, *args, **kwargs):
+        self.orders = []
+        super(PLCContainer, self).__init__(*args, **kwargs)
 
 class PLCLocationRequest(PLCDataObject):
     expectedContainerId = '' # type: str
@@ -94,7 +111,8 @@ class PLCProductionCycle:
     
     _memory = None # type: plcmemory.PLCMemory # an instance of PLCMemory
     _locationIndices = None # type: typing.List[int]
-    _locationsQueue = {} # type: typing.Dict[int, typing.List[PLCOrder]]
+    _ordersQueue = None # type: typing.List[PLCOrder]
+    _locationsQueue = None # type: typing.Dict[int, typing.List[PLCContainer]]
     _isok = False # type: bool
     _thread = None # type: typing.Optional[threading.Thread]
     _state = None # type: typing.Tuple[PLCProductionCycleState, float] # current state and state transition timestamp
@@ -106,6 +124,8 @@ class PLCProductionCycle:
     def __init__(self, memory: plcmemory.PLCMemory, maxLocationIndex: int = 4):
         self._memory = memory
         self._locationIndices = list(range(1, maxLocationIndex + 1))
+        self._ordersQueue = []
+        self._locationsQueue = {}
         for locationIndex in self._locationIndices:
             self._locationsQueue[locationIndex] = []
 
@@ -259,13 +279,13 @@ class PLCProductionCycle:
                 if self._IsPreparationCycleState(PLCPreparationCycleState.Prepared):
                     order = self._GetPreparationCycleStateOrder()
                     # TODO: check that we can execute prepared order
-                if not order:
-                    candidates = []
-                    for locationIndex in self._locationIndices:
-                        if self._locationsQueue[locationIndex]:
-                            candidates.append(self._locationsQueue[locationIndex][0])
-                    if candidates:
-                        order = candidates[0]
+                # if not order:
+                #     candidates = []
+                #     for locationIndex in self._locationIndices:
+                #         if self._locationsQueue[locationIndex]:
+                #             candidates.append(self._locationsQueue[locationIndex][0])
+                #     if candidates:
+                #         order = candidates[0]
 
                 if order:
                     self._SetOrderCycleState(PLCOrderCycleState.Starting, order)
@@ -334,8 +354,11 @@ class PLCProductionCycle:
 
                 # remove order from queue
                 order = self._GetOrderCycleStateOrder()
-                assert(self._locationsQueue[order.pickLocationIndex][0] is order)
-                self._locationsQueue[order.pickLocationIndex].pop(0)
+                self._ordersQueue.remove(order)
+                if order.pickContainer:
+                    order.pickContainer.orders.remove(order)
+                if order.placeContainer:
+                    order.placeContainer.orders.remove(order)
 
                 self._SetOrderCycleState(PLCOrderCycleState.Finished, order)
 
@@ -486,46 +509,25 @@ class PLCProductionCycle:
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetLocationState(locationIndex, PLCLocationState.Stopped)
             else:
-                request = None
+                queue = self._locationsQueue[locationIndex]
+                while queue:
+                    if queue[0].orders:
+                        break
+                    # container has finished its usage, okay to move away
+                    log.info('popping no longer used container: %r', queue[0])
+                    queue.pop(0)
 
-                # location could be used by running order
-                if self._IsOrderCycleState(PLCOrderCycleState.Starting) or self._IsOrderCycleState(PLCOrderCycleState.Running):
-                    order = self._GetOrderCycleStateOrder()
-                    if locationIndex in (order.pickLocationIndex, order.placeLocationIndex):
-                        request = PLCLocationRequest(
-                            expectedContainerId = order.pickContainerId if locationIndex == order.pickLocationIndex else order.placeContainerId,
-                            expectedContainerType = order.pickContainerType if locationIndex == order.pickLocationIndex else order.placeContainerType,
-                            orderUniqueId = order.uniqueId,
-                        )
+                request = PLCLocationRequest()
+                if queue:
+                    request = PLCLocationRequest(
+                        expectedContainerId = queue[0].containerId,
+                        expectedContainerType = queue[0].containerType,
+                        orderUniqueId = queue[0].orders[0].uniqueId
+                    )
 
-                # location could be used by preparation order
-                if not request:
-                    if self._IsPreparationCycleState(PLCPreparationCycleState.Starting) or self._IsPreparationCycleState(PLCPreparationCycleState.Running):
-                        order = self._GetPreparationCycleStateOrder()
-                        if locationIndex in (order.pickLocationIndex, order.placeLocationIndex):
-                            request = PLCLocationRequest(
-                                expectedContainerId = order.pickContainerId if locationIndex == order.pickLocationIndex else order.placeContainerId,
-                                expectedContainerType = order.pickContainerType if locationIndex == order.pickLocationIndex else order.placeContainerType,
-                                orderUniqueId = order.uniqueId,
-                            )
-
-                # if no more order uses this locaiton, release it
-                # TODO: if no recent order will use this location, we can also release it
-                if not request:
-                    used = False
-                    for queue in self._locationsQueue.values():
-                        for order in queue:
-                            if locationIndex in (order.pickLocationIndex, order.placeLocationIndex):
-                                used = True
-                                break
-                    if not used:
-                        request = PLCLocationRequest()
-
-                # if the used location does not have matching container, move container
-                if request:
-                    if request.expectedContainerId != controller.GetString('location%dContainerId' % locationIndex) or \
-                       request.expectedContainerType != controller.GetString('location%dContainerType' % locationIndex):
-                        self._SetLocationState(locationIndex, PLCLocationState.Move, request)
+                if request.expectedContainerId != controller.GetString('location%dContainerId' % locationIndex) or \
+                   request.expectedContainerType != controller.GetString('location%dContainerType' % locationIndex):
+                    self._SetLocationState(locationIndex, PLCLocationState.Move, request)
 
         if self._IsLocationState(locationIndex, PLCLocationState.Move):
             request = self._GetLocationStateRequest(locationIndex)
@@ -626,7 +628,45 @@ class PLCProductionCycle:
             if not controller.GetBoolean('startQueueOrder'):
                 # TODO: check order parameters here
                 order = self._GetQueueOrderStateOrder()
-                self._locationsQueue[order.pickLocationIndex].append(order)
+
+                # deal with pick container
+                if order.pickLocationIndex in self._locationIndices and order.pickContainerId:
+                    pickContainer = None
+                    for container in self._locationsQueue[order.pickLocationIndex]:
+                        # reuse the previous container if found
+                        if (container.containerId, container.containerType) == (order.pickContainerId, order.pickContainerType):
+                            pickContainer = container
+                            break
+                    if not pickContainer:
+                        pickContainer = PLCContainer(
+                            locationIndex = order.pickLocationIndex,
+                            containerId = order.pickContainerId,
+                            containerType = order.pickContainerType,
+                        )
+                        self._locationsQueue[pickContainer.locationIndex].append(pickContainer)
+                    pickContainer.orders.append(order)
+                    order.pickContainer = pickContainer
+
+                # deal with place container
+                if order.placeLocationIndex in self._locationIndices and order.placeContainerId:
+                    placeContainer = None
+                    for container in self._locationsQueue[order.placeLocationIndex]:
+                        # reuse the previous container if found
+                        if (container.containerId, container.containerType) == (order.placeContainerId, order.placeContainerType):
+                            placeContainer = container
+                            break
+                    if not placeContainer:
+                        placeContainer = PLCContainer(
+                            locationIndex = order.placeLocationIndex,
+                            containerId = order.placeContainerId,
+                            containerType = order.placeContainerType,
+                        )
+                        self._locationsQueue[placeContainer.locationIndex].append(placeContainer)
+                    placeContainer.orders.append(order)
+                    order.placeContainer = placeContainer
+
+                # add the order to queue
+                self._ordersQueue.append(order)
                 self._SetQueueOrderState(PLCQueueOrderState.Succeeded)
                 log.warn('order queued on production cycle: %r', order)
 
