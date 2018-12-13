@@ -269,28 +269,18 @@ class PLCProductionCycle:
         if self._IsOrderCycleState(PLCOrderCycleState.Idle):
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetOrderCycleState(PLCOrderCycleState.Stopping)
-            elif self._IsPreparationCycleState(PLCPreparationCycleState.Starting) or self._IsPreparationCycleState(PLCPreparationCycleState.Running):
+            elif self._IsPreparationCycleState(PLCPreparationCycleState.Starting, PLCPreparationCycleState.Running):
                 # if preparation is running, need to wait for it to finish
                 pass
             else:
-                order = None
+                candidate = None
                 if self._lastPreparedOrder is not None and self._lastPreparedOrder in self._ordersQueue:
-                    order = self._lastPreparedOrder
-                    # TODO: maybe check that we can execute prepared order, maybe no need
-                if not order:
-                    candidates = [] # type: typing.List[PLCOrder]
-                    for queue in self._locationsQueue.values():
-                        if queue:
-                            candidates += queue[0].orders
-                    if candidates:
-                        # pick candidate based on the ordering of the orders that came in
-                        for candidate in self._ordersQueue:
-                            if candidate in candidates:
-                                order = candidate
-                                break
+                    candidate = self._lastPreparedOrder
+                else:
+                    candidate = self._GetOrderCandidate()
 
-                if order:
-                    self._SetOrderCycleState(PLCOrderCycleState.Starting, order)
+                if candidate:
+                    self._SetOrderCycleState(PLCOrderCycleState.Starting, candidate)
 
         if self._IsOrderCycleState(PLCOrderCycleState.Starting):
             order = self._GetOrderCycleStateOrder()
@@ -421,59 +411,11 @@ class PLCProductionCycle:
                 if self._IsOrderCycleState(PLCOrderCycleState.Running, PLCOrderCycleState.Finish, PLCOrderCycleState.Finishing, PLCOrderCycleState.Finished):
                     currentOrder = self._GetOrderCycleStateOrder()
 
-                # gather all the candidates
-                availableCandidates = [] # type: typing.List[PLCOrder]
-                pickableCandidates = [] # type: typing.List[PLCOrder]
-                placeableCandidates = [] # type: typing.List[PLCOrder]
-                unavailableCandidates = [] # type: typing.List[PLCOrder]
-                for queue in self._locationsQueue.values():
-                    if not queue:
-                        continue
-                    for order in queue[0].orders:
-                        # need to make sure that the container is going to be next on the locations
-                        nextContainerAtPickLocation = None
-                        queue = self._locationsQueue[order.pickLocationIndex]
-                        if queue:
-                            nextContainerAtPickLocation = queue[0]
-                            if nextContainerAtPickLocation.orders == [currentOrder]:
-                                nextContainerAtPickLocation = queue[1] if len(queue) > 1 else None
-                        if nextContainerAtPickLocation is not order.pickContainer:
-                            continue
-
-                        nextContainerAtPlaceLocation = None
-                        queue = self._locationsQueue[order.placeLocationIndex]
-                        if queue:
-                            nextContainerAtPlaceLocation = queue[0]
-                            if nextContainerAtPlaceLocation.orders == [currentOrder]:
-                                nextContainerAtPlaceLocation = queue[1] if len(queue) > 1 else None
-                        if nextContainerAtPlaceLocation is not order.placeContainer:
-                            continue
-
-                        if not currentOrder:
-                            availableCandidates.append(order)
-                            continue
-                        if order is currentOrder:
-                            continue
-
-                        if order.pickLocationIndex != currentOrder.pickLocationIndex and order.placeLocationIndex != currentOrder.placeLocationIndex:
-                            availableCandidates.append(order)
-                        elif order.pickLocationIndex != currentOrder.pickLocationIndex:
-                            pickableCandidates.append(order)
-                        elif order.placeLocationIndex != currentOrder.placeLocationIndex:
-                            placeableCandidates.append(order)
-                        else:
-                            unavailableCandidates.append(order)
-
-                # within each category of candidates, need to order them based on incoming order
-                availableCandidates = [order for order in self._ordersQueue if order in availableCandidates]
-                pickableCandidates = [order for order in self._ordersQueue if order in pickableCandidates]
-                placeableCandidates = [order for order in self._ordersQueue if order in placeableCandidates]
-                unavailableCandidates = [order for order in self._ordersQueue if order in unavailableCandidates]
-                candidates = availableCandidates + pickableCandidates + placeableCandidates + unavailableCandidates
-                if candidates and candidates[0] is not self._lastPreparedOrder:
+                candidate = self._GetOrderCandidate(currentOrder)
+                if candidate and candidate is not self._lastPreparedOrder:
                     # found a new order that we should be preparing for
                     self._lastPreparedOrder = None
-                    self._SetPreparationCycleState(PLCPreparationCycleState.Starting, candidates[0])
+                    self._SetPreparationCycleState(PLCPreparationCycleState.Starting, candidate)
 
         if self._IsPreparationCycleState(PLCPreparationCycleState.Starting):
             order = self._GetPreparationCycleStateOrder()
@@ -739,3 +681,68 @@ class PLCProductionCycle:
 
             if self._IsState(PLCProductionCycleState.Running):
                 self._SetQueueOrderState(PLCQueueOrderState.Idle)
+
+    #
+    # Utilities.
+    #
+
+    def _GetOrderCandidate(self, currentOrder: typing.Optional[PLCOrder] = None) -> typing.Optional[PLCOrder]:
+        candidates = self._ListOrderCandidates(currentOrder)
+        if candidates:
+            return candidates[0]
+        return None
+
+    def _ListOrderCandidates(self, currentOrder: typing.Optional[PLCOrder] = None) -> typing.List[PLCOrder]:
+        candidates = []
+        for queue in self._locationsQueue.values():
+            if not queue:
+                continue
+            for order in queue[0].orders:
+                if order is currentOrder:
+                    continue
+
+                # need to make sure that the container is going to be next on the locations
+                nextContainerAtPickLocation = None
+                queue = self._locationsQueue[order.pickLocationIndex]
+                if queue:
+                    nextContainerAtPickLocation = queue[0]
+                    if nextContainerAtPickLocation.orders == [currentOrder]:
+                        nextContainerAtPickLocation = queue[1] if len(queue) > 1 else None
+                if nextContainerAtPickLocation is not order.pickContainer:
+                    continue
+
+                nextContainerAtPlaceLocation = None
+                queue = self._locationsQueue[order.placeLocationIndex]
+                if queue:
+                    nextContainerAtPlaceLocation = queue[0]
+                    if nextContainerAtPlaceLocation.orders == [currentOrder]:
+                        nextContainerAtPlaceLocation = queue[1] if len(queue) > 1 else None
+                if nextContainerAtPlaceLocation is not order.placeContainer:
+                    continue
+
+                candidates.append(order)
+
+        if not currentOrder:
+            return [order for order in self._ordersQueue if order in candidates]
+
+        availableCandidates = [] # type: typing.List[PLCOrder]
+        pickableCandidates = [] # type: typing.List[PLCOrder]
+        placeableCandidates = [] # type: typing.List[PLCOrder]
+        unavailableCandidates = [] # type: typing.List[PLCOrder]
+
+        for order in candidates:
+            if order.pickLocationIndex != currentOrder.pickLocationIndex and order.placeLocationIndex != currentOrder.placeLocationIndex:
+                availableCandidates.append(order)
+            elif order.pickLocationIndex != currentOrder.pickLocationIndex:
+                pickableCandidates.append(order)
+            elif order.placeLocationIndex != currentOrder.placeLocationIndex:
+                placeableCandidates.append(order)
+            else:
+                unavailableCandidates.append(order)
+
+        # within each category of candidates, need to order them based on incoming order
+        availableCandidates = [order for order in self._ordersQueue if order in availableCandidates]
+        pickableCandidates = [order for order in self._ordersQueue if order in pickableCandidates]
+        placeableCandidates = [order for order in self._ordersQueue if order in placeableCandidates]
+        unavailableCandidates = [order for order in self._ordersQueue if order in unavailableCandidates]
+        return availableCandidates + pickableCandidates + placeableCandidates + unavailableCandidates
