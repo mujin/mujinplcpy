@@ -18,11 +18,11 @@ class PLCController:
     _lock = None # type: threading.Lock # protects _queue
     _condition = None # type: threading.Condition # condition variable for _queue
 
-    _maxHeartbeatInterval = None # type: typing.Optional[int] # if heartbeat has not been received in this interval, connection is considered to be lost
+    _maxHeartbeatInterval = None # type: typing.Optional[float] # if heartbeat has not been received in this interval, connection is considered to be lost
     _heartbeatSignal = None # type typing.Optional[str] # name of the heartbeat signal that is changed contantly
     _lastHeartbeat = None # type typing.Optional[int] # timestamp of the last heartbeat
 
-    def __init__(self, memory: plcmemory.PLCMemory, maxHeartbeatInterval: typing.Optional[int] = None, heartbeatSignal: typing.Optional[str] = None):
+    def __init__(self, memory: plcmemory.PLCMemory, maxHeartbeatInterval: typing.Optional[float] = None, heartbeatSignal: typing.Optional[str] = None):
         self._memory = memory
         self._state = {}
 

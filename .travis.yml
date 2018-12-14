@@ -3,8 +3,9 @@ python:
 - "3.5"
 - "3.6"
 install:
-- pip install flake8==3.6.0 logutils==0.3.5 pyzmq==17.1.2 pytest==4.0.1
+- pip install flake8==3.6.0 mypy==0.650 logutils==0.3.5 pyzmq==17.1.2 pytest==4.0.1
 - pip install .
 script:
-- python -m flake8 --show-source --ignore=E251,E261,E301,E302,E303,E501 python/
-- pytest
+- flake8 --show-source --ignore=E251,E261,E301,E302,E303,E305,E501 .
+- mypy --config-file=.mypy.ini ./**/*.py 
+
