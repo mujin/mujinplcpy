@@ -7,7 +7,7 @@ setup(
     distclass=Distribution,
     name='MujinPLC',
     version='0.1.0',
-    packages=['mujinplc',],
+    packages=['mujinplc'],
     package_dir={'mujinplc': 'python/mujinplc'},
     scripts=['bin/mujin_mujinplcpy_runexample.py'],
     license='Apache License, Version 2.0',

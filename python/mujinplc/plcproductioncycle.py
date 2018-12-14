@@ -114,7 +114,7 @@ class PLCQueueOrderState(enum.Enum):
     Disabled = 'disabled'
 
 class PLCProductionCycle:
-    
+
     _memory = None # type: plcmemory.PLCMemory # an instance of PLCMemory
     _locationIndices = None # type: typing.List[int]
     _ordersQueue = None # type: typing.List[PLCOrder]
@@ -198,7 +198,7 @@ class PLCProductionCycle:
 
             if controller.GetBoolean('startProductionCycle') and not controller.GetBoolean('stopProductionCycle'):
                 self._SetState(PLCProductionCycleState.Starting)
-        
+
         # once startProductionCycle triggered
         # we wait for the trigger to go down first
         # before actually running any processing
@@ -212,7 +212,7 @@ class PLCProductionCycle:
                 self._SetState(PLCProductionCycleState.Stopping)
             elif not controller.GetBoolean('startProductionCycle'):
                 self._SetState(PLCProductionCycleState.Running)
-        
+
         # this is the main running state, when the production cycle has started
         if self._IsState(PLCProductionCycleState.Running):
             controller.SetMultiple({
@@ -458,7 +458,7 @@ class PLCProductionCycle:
 
                 'startPreparation': True,
                 'stopPreparation': False,
-            })            
+            })
 
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)

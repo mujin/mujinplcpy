@@ -204,7 +204,7 @@ class PLCLogic:
 
     def CheckError(self) -> None:
         """
-        Check if there is an error set by MUJIN controller in the current state. If so, raise a PLCError exception. 
+        Check if there is an error set by MUJIN controller in the current state. If so, raise a PLCError exception.
         """
         if self.IsError():
             errorCode = PLCErrorCode(self._controller.GetInteger('errorcode'))
@@ -291,7 +291,7 @@ class PLCLogic:
             'isRobotMoving': None,
             'numLeftInOrder': None,
             'numPutInDestination': None,
-            'orderCycleFinishCode':  None,
+            'orderCycleFinishCode': None,
         })
         self.CheckError()
         return self.GetOrderCycleStatus()
@@ -334,7 +334,7 @@ class PLCLogic:
         try:
             if not self._controller.WaitUntilAllOrAny({
                 'isRunningOrderCycle': False,
-                'isRobotMoving':  False,
+                'isRobotMoving': False,
             }, {
                 'isError': True,
             }, timeout=timeout):

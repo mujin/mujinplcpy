@@ -52,8 +52,8 @@ class PLCPickWorkerBackend:
            self._preparedOrder.placeLocationIndex == order.placeLocationIndex and \
            self._preparedOrder.placeContainerId == order.placeContainerId and \
            self._preparedOrder.placeContainerType == order.placeContainerType:
-           isPrepared = True
-           self._preparedOrder = None
+            isPrepared = True
+            self._preparedOrder = None
 
         log.warn('running order cycle: %r, isPrepared = %r', order, isPrepared)
         while True:
@@ -168,7 +168,7 @@ class PLCPickWorkerSimulator:
 
         controller.SetMultiple({
             'isModeAuto': True,
-            'isSystemReady':  True,
+            'isSystemReady': True,
             'isCycleReady': True,
         })
 
@@ -203,7 +203,7 @@ class PLCPickWorkerSimulator:
 
         controller.SetMultiple({
             'isModeAuto': False,
-            'isSystemReady':  False,
+            'isSystemReady': False,
             'isCycleReady': False,
         })
 

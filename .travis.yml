@@ -1,0 +1,9 @@
+language: python
+python:
+- "3.5"
+- "3.6"
+install:
+- pip install -r requirements.txt
+- pip install .
+script:
+- python -m flakes8 --show-source --ignore=E251,E261,E301,E302,E303,E501 python/

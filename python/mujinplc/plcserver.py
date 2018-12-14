@@ -35,15 +35,15 @@ class PLCServerSocket:
         if self._socket is not None:
             try:
                 self._socket.close()
-            except:
-                log.exception('caught exception when closing socket')
+            except Exception as e:
+                log.exception('caught exception when closing socket: %s', e)
             self._socket = None
 
         if self._ctx is not None:
             try:
                 self._ctx.destroy()
-            except:
-                log.exception('caught exception when destroying context')
+            except Exception as e:
+                log.exception('caught exception when destroying context: %s', e)
             self._ctx = None
 
     def Poll(self, timeout=50):
@@ -122,13 +122,13 @@ class PLCServer:
                         response['keyvalues'] = self._memory.Read(request['keys'])
                     elif request['command'] == 'write':
                         self._memory.Write(request['keyvalues'])
-                except:
-                    log.exception('failed to handle request: %r', request)
+                except Exception as e:
+                    log.exception('failed to handle request: %s: %r', e, request)
 
                 socket.Send(response)
 
-            except:
-                log.exception('caught exception in server thread, resetting socket')
+            except Exception as e:
+                log.exception('caught exception in server thread, resetting socket: %s', e)
                 if socket is not None:
                     socket.Destroy()
                     socket = None
