@@ -617,11 +617,11 @@ class PLCProductionCycle:
 
                     robotName = controller.GetString('queueOrderRobotName'),
 
-                    pickLocationIndex = controller.GetInteger('queueOrderPickLocation'),
+                    pickLocationIndex = controller.GetInteger('queueOrderPickLocationIndex'),
                     pickContainerId = controller.GetString('queueOrderPickContainerId'),
                     pickContainerType = controller.GetString('queueOrderPickContainerType'),
 
-                    placeLocationIndex = controller.GetInteger('queueOrderPlaceLocation'),
+                    placeLocationIndex = controller.GetInteger('queueOrderPlaceLocationIndex'),
                     placeContainerId = controller.GetString('queueOrderPlaceContainerId'),
                     placeContainerType = controller.GetString('queueOrderPlaceContainerIndex'),
 
