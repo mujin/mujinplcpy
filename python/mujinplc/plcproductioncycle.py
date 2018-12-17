@@ -448,11 +448,11 @@ class PLCProductionCycle:
                 'preparationOrderNumber': order.orderNumber,
                 'preparationRobotName': order.robotName,
 
-                'preparationPickLocationIndex': order.pickLocationIndex,
+                'preparationPickLocation': order.pickLocationIndex,
                 'preparationPickContainerId': order.pickContainerId,
                 'preparationPickContainerType': order.pickContainerType,
 
-                'preparationPlaceLocationIndex': order.placeLocationIndex,
+                'preparationPlaceLocation': order.placeLocationIndex,
                 'preparationPlaceContainerId': order.placeContainerId,
                 'preparationPlaceContainerType': order.placeContainerType,
 

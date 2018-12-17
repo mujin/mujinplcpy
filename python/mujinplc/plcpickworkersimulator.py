@@ -305,10 +305,10 @@ class PLCPickWorkerSimulator:
                 partType = controller.GetString('preparationPartType'),
                 orderNumber = controller.GetInteger('preparationOrderNumber'),
                 robotName = controller.GetString('preparationRobotName'),
-                pickLocationIndex = controller.GetInteger('preparationPickLocationIndex'),
+                pickLocationIndex = controller.GetInteger('preparationPickLocation'),
                 pickContainerId = controller.GetString('preparationPickContainerId'),
                 pickContainerType = controller.GetString('preparationPickContainerType'),
-                placeLocationIndex = controller.GetInteger('preparationPlaceLocationIndex'),
+                placeLocationIndex = controller.GetInteger('preparationPlaceLocation'),
                 placeContainerId = controller.GetString('preparationPlaceContainerId'),
                 placeContainerType = controller.GetString('preparationPlaceContainerType'),
             )
