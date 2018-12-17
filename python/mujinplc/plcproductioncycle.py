@@ -307,11 +307,11 @@ class PLCProductionCycle:
                 'orderNumber': order.orderNumber,
                 'orderRobotName': order.robotName,
 
-                'orderPickLocationIndex': order.pickLocationIndex,
+                'orderPickLocation': order.pickLocationIndex,
                 'orderPickContainerId': order.pickContainerId,
                 'orderPickContainerType': order.pickContainerType,
 
-                'orderPlaceLocationIndex': order.placeLocationIndex,
+                'orderPlaceLocation': order.placeLocationIndex,
                 'orderPlaceContainerId': order.placeContainerId,
                 'orderPlaceContainerType': order.placeContainerType,
 
