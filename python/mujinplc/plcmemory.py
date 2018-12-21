@@ -66,8 +66,15 @@ class PLCMemory:
 
 class PLCMemoryLogger:
 
-    def __init__(self, memory: PLCMemory):
+    _ignoredKeys = None # type: typing.Iterable[str]
+
+    def __init__(self, memory: PLCMemory, ignoredKeys: typing.Optional[typing.Iterable[str]] = None):
+        self._ignoredKeys = ignoredKeys or []
         memory.AddObserver(self)
 
-    def MemoryModified(self, modifications: typing.Optional[typing.Mapping[str, PLCMemory.ValueType]]) -> None:
-        log.debug('%r', modifications)
+    def MemoryModified(self, modifications: typing.Mapping[str, PLCMemory.ValueType]) -> None:
+        modificationsCopy = dict(modifications)
+        for key in self._ignoredKeys:
+            modificationsCopy.pop(key)
+        if modificationsCopy:
+            log.debug('%r', modificationsCopy)

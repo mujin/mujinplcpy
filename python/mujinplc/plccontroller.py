@@ -35,10 +35,10 @@ class PLCController:
 
         self._memory.AddObserver(self)
 
-    def MemoryModified(self, modifications: typing.Optional[typing.Mapping[str, plcmemory.PLCMemory.ValueType]]) -> None:
+    def MemoryModified(self, modifications: typing.Mapping[str, plcmemory.PLCMemory.ValueType]) -> None:
         self._Enqueue(modifications)
 
-    def _Enqueue(self, modifications: typing.Optional[typing.Mapping[str, plcmemory.PLCMemory.ValueType]]) -> None:
+    def _Enqueue(self, modifications: typing.Mapping[str, plcmemory.PLCMemory.ValueType]) -> None:
         if not modifications:
             return
         if not self._heartbeatSignal or self._heartbeatSignal in modifications:
