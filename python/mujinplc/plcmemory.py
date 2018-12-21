@@ -75,6 +75,6 @@ class PLCMemoryLogger:
     def MemoryModified(self, modifications: typing.Mapping[str, PLCMemory.ValueType]) -> None:
         modificationsCopy = dict(modifications)
         for key in self._ignoredKeys:
-            modificationsCopy.pop(key)
+            modificationsCopy.pop(key, None)
         if modificationsCopy:
             log.debug('%r', modificationsCopy)
