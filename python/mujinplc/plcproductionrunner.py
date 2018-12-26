@@ -238,8 +238,8 @@ class PLCProductionRunner:
         loop = asyncio.new_event_loop()
         controller = plccontroller.PLCController(self._memory)
         finishCode = PLCMoveLocationFinishCode.GenericError
-        actualContainerId = ''
-        actualContainerType = ''
+        actualContainerId = '?' # use ? to indicate location without container, because empty means feature disabled
+        actualContainerType = '?' # use ? to indicate location without container, because empty means feature disabled
         try:
             if not controller.SyncAndGetBoolean('startMoveLocation%d' % locationIndex):
                 # trigger no longer alive
@@ -254,8 +254,8 @@ class PLCProductionRunner:
             controller.SetMultiple({
                 'moveLocation%dFinishCode' % locationIndex: 0,
                 'isRunningMoveLocation%d' % locationIndex: True,
-                'location%dContainerId' % locationIndex: '',
-                'location%dContainerType' % locationIndex: '',
+                'location%dContainerId' % locationIndex: '?', # use ? to indicate location without container, because empty means feature disabled
+                'location%dContainerType' % locationIndex: '?', # use ? to indicate location without container, because empty means feature disabled
                 'location%dProhibited' % locationIndex: True,
             })
 
