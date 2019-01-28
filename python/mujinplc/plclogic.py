@@ -18,7 +18,29 @@ class PLCErrorCode(enum.IntEnum):
     """
 
     ErrorCodeNotAvailable = 0x0000
+    FinishedNoMoreTargets = 0x0002
+    FinishedNoMoreTargetsNotEmpty = 0x0003
+    FinishedNoMoreDest = 0x0004
+    FinishedNoEnvironmentUpdate = 0x0005
+    FinishedDropTargetFailure = 0x0006
+    FinishedTooManyPickFailure = 0x0007
+    FinishedRobotExecutionError = 0x0008
+    FinishedNoDestObstacles = 0x0009
+    FinishedStopDueToTorqueLimit = 0x000a
+    FinishedGripperExecutionError = 0x000b
+    FinishedCannotRecoverWhileGrabbingTarget = 0x000c
+    FinishedCycleStopped = 0x0101
+    FinishedImmediatelyStopped = 0x0102
+    FinishedInterlockWithLocation = 0x0103
     EStopError = 0x1000
+    FinishedNoValidGrasp = 0x1001
+    FinishedNoValidDest = 0x1002
+    FinishedNoValidGraspDestPair = 0x1003
+    FinishedNoValidPath = 0x1004
+    FinishedNoValidTargets = 0x1005
+    FinishedNoValidBarcodeScan = 0x1006
+    FinishedComputePlanFailure = 0x1007
+    FinishedCannotGenerateGraspingModel = 0x1008
     PLCError = 0x2000
     PLCSupplyInterlockError = 0x2001
     PLCDestInterlockError = 0x2002
@@ -29,8 +51,10 @@ class PLCErrorCode(enum.IntEnum):
     SensorError = 0x5000
     RobotError = 0x6000
     SystemError = 0x7000
+    NoVisionUpdateError = 0x7001
     OtherCycleError = 0xf000
     InCycleError = 0xf001
+    GrabbingError = 0xf002
     InvalidOrderNumberError = 0xf003
     NotRunningError = 0xf004
     FailedToMoveToError = 0xf009
@@ -83,8 +107,12 @@ class PLCOrderCycleFinishCode(enum.IntEnum):
     FinishedTooManyPickFailures = 0x0007
     FinishedRobotExecutionError = 0x0008
     FinishedNoDestObstacles = 0x0009
+    FinishedStopDueToTorqueLimit = 0x000a
+    FinishedGripperExecutionError = 0x000b
+    FinishedCannotRecoverWhileGrabbingTarget = 0x000c
     FinishedStopped = 0x0101
     FinishedStoppedImmediately = 0x0102
+    FinishedInterlockWithLocation = 0x0103
     FinishedPlanningFailure = 0x1000
     FinishedNoValidGrasp = 0x1001
     FinishedNoValidDest = 0x1002
@@ -97,6 +125,11 @@ class PLCOrderCycleFinishCode(enum.IntEnum):
     FinishedContainerNotDetected = 0x2001
     FinishedPlaceContainerNotDetected = 0x2002
     FinishedBadExpectedDetectionHeight = 0x2003
+    FinishedUnexpectedMeasuredTargetSize = 0x2004
+    FinishedInvalidOrderNumber = 0x3000
+    FinishedInvalidPickContainerType = 0x3001
+    FinishedInvalidPlaceContainerType = 0x3002
+    FinishedInvalidOrderNumPartBarcodes = 0x3003
     FinishedCannotComputeFinishPlan = 0xfff7
     FinishedUnknownReasonNoError = 0xfff8
     FinishedCannotGetState = 0xfff9
@@ -109,6 +142,10 @@ class PLCOrderCycleFinishCode(enum.IntEnum):
 class PLCPreparationFinishCode(enum.IntEnum):
     PreparationNotAvailable = 0x0000
     PreparationFinishedSuccess = 0x0001
+    PreparationFinishedInvalidOrderNumber = 0x3000
+    PreparationFinishedInvalidPickContainerType = 0x3001
+    PreparationFinishedInvalidPlaceContainerType = 0x3002
+    PreparationFinishedInvalidOrderNumPartBarcodes = 0x3003
     PreparationFinishedImmediatelyStopped = 0x0102
     PreparationFinishedBadPartType = 0xfffd
     PreparationFinishedBadOrderCyclePrecondition = 0xfffe
