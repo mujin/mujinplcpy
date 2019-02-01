@@ -9,7 +9,7 @@
 # - [ ] add state timeouts
 
 import threading
-import typing
+import typing # noqa: F401 # used in type check
 import time
 import enum
 

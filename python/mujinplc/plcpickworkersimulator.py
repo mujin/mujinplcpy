@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import threading
-import typing
+import typing # noqa: F401 # used in type check
 import asyncio
 import time
 

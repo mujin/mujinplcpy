@@ -2,7 +2,7 @@
 
 import time
 import threading
-import typing
+import typing # noqa: F401 # used in type check
 import socket
 import select
 import json

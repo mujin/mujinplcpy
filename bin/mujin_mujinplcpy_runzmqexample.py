@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sys
-import typing
+import typing # noqa: F401 # used in type check
 import asyncio
 
 from mujinplc import plcmemory, plczmqserver, plccontroller, plclogic, plcproductionrunner, plcproductioncycle, plcpickworkersimulator

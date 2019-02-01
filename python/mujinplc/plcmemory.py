@@ -2,7 +2,7 @@
 
 import threading
 import weakref
-import typing
+import typing # noqa: F401 # used in type check
 
 import logging
 log = logging.getLogger(__name__)

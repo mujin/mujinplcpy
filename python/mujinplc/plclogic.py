@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import typing
+import typing # noqa: F401 # used in type check
 import enum
 
 from . import plccontroller

@@ -2,7 +2,7 @@
 
 import time
 import threading
-import typing
+import typing # noqa: F401 # used in type check
 import zmq
 
 from . import plcmemory

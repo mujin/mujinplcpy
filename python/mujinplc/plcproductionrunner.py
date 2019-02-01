@@ -3,7 +3,7 @@
 import threading
 import time
 import asyncio
-import typing
+import typing # noqa: F401 # used in type check
 import enum
 
 from . import plcmemory, plclogic, plccontroller
