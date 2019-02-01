@@ -3,30 +3,25 @@
 import time
 import threading
 import typing
-import zmq
+import socket
+import select
+import json
 
 from . import plcmemory
 
 import logging
 log = logging.getLogger(__name__)
 
-class PLCZMQServerSocket:
+class PLCUDPServerSocket:
     """
-    A ZMQ server socket implementation internally used by PLCZMQServer.
+    A UDP server socket implementation internally used by PLCUDPServer.
     """
 
-    _ctx = None # allocated zmq context, need to free
-    _socket = None # allocated zmq socket, need to close
+    _socket = None # allocated udp socket, need to close
 
-    def __init__(self, endpoint, ctx=None):
-        if ctx is None:
-            self._ctx = zmq.Context()
-            ctx = self._ctx
-
-        self._socket = ctx.socket(zmq.REP)
-        self._socket.setsockopt(zmq.LINGER, 100) # discard pending messages after 100ms when closing
-        self._socket.setsockopt(zmq.SNDHWM, 2) # queue at most two messages per client
-        self._socket.bind(endpoint)
+    def __init__(self, port):
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._socket.bind(('', port))
 
     def __del__(self):
         self.Destroy()
@@ -39,37 +34,32 @@ class PLCZMQServerSocket:
                 log.exception('caught exception when closing socket: %s', e)
             self._socket = None
 
-        if self._ctx is not None:
-            try:
-                self._ctx.destroy()
-            except Exception as e:
-                log.exception('caught exception when destroying context: %s', e)
-            self._ctx = None
-
     def Poll(self, timeout=50):
-        return self._socket.poll(timeout, zmq.POLLIN) == zmq.POLLIN
+        rlist, _, xlist = select.select([self._socket], [], [self._socket], timeout / 1000.0)
+        if self._socket in xlist:
+            raise Exception('socket exception detected')
+        return self._socket in rlist
 
     def Receive(self):
-        return self._socket.recv_json(zmq.NOBLOCK)
+        data, address = self._socket.recvfrom(64 * 1024)
+        return json.loads(data.decode('utf-8')), address
 
-    def Send(self, data):
-        self._socket.send_json(data, zmq.NOBLOCK)
+    def Send(self, data, address):
+        self._socket.sendto(json.dumps(data).encode('utf-8'), address)
 
-class PLCZMQServer:
+class PLCUDPServer:
     """
-    A ZMQ server that hosts the PLC controller.
+    A UDP server that hosts the PLC controller.
     """
 
     _memory = None # type: plcmemory.PLCMemory # an instance of PLCMemory
-    _endpoint = None # type: str # listening endpoint to bind to
-    _ctx = None # type: typing.Optional[zmq.Context] # zmq context
+    _port = None # type: int # listening port to bind to
     _thread = None # type: typing.Optional[threading.Thread] # server thread
     _isok = False # type: bool # signal that the server thread should continue to run
 
-    def __init__(self, memory: plcmemory.PLCMemory, endpoint: str, ctx: typing.Optional[zmq.Context] = None):
+    def __init__(self, memory: plcmemory.PLCMemory, port: int):
         self._memory = memory
-        self._endpoint = endpoint
-        self._ctx = ctx
+        self._port = port
         self._isok = False
 
     def __del__(self):
@@ -87,7 +77,7 @@ class PLCZMQServer:
 
     def IsRunning(self) -> bool:
         """
-        Whether ZMQ server is currently running.
+        Whether the server is currently running.
         """
         return self._isok
 
@@ -109,23 +99,25 @@ class PLCZMQServer:
         while self._isok:
             try:
                 if socket is None:
-                    socket = PLCZMQServerSocket(self._endpoint, ctx=self._ctx)
+                    socket = PLCUDPServerSocket(self._port)
 
                 if not socket.Poll(timeout=50):
                     continue
 
                 response = {}
-                request = socket.Receive()
+                request, address = socket.Receive()
 
                 try:
-                    if request['command'] == 'read':
-                        response['keyvalues'] = self._memory.Read(request['keys'])
-                    elif request['command'] == 'write':
-                        self._memory.Write(request['keyvalues'])
+                    response['seqid'] = request['seqid']
+                    response['timestamp'] = int(time.monotonic() * 1e9)
+                    if 'writevalues' in request:
+                        self._memory.Write(request['writevalues'])
+                    if 'read' in request:
+                        response['readvalues'] = self._memory.Read(request['read'])
                 except Exception as e:
                     log.exception('failed to handle request: %s: %r', e, request)
 
-                socket.Send(response)
+                socket.Send(response, address)
 
             except Exception as e:
                 log.exception('caught exception in server thread, resetting socket: %s', e)
