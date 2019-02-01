@@ -5,7 +5,7 @@ import sys
 import typing
 import asyncio
 
-from mujinplc import plcmemory, plcserver, plccontroller, plclogic, plcproductionrunner, plcproductioncycle, plcpickworkersimulator
+from mujinplc import plcmemory, plczmqserver, plccontroller, plclogic, plcproductionrunner, plcproductioncycle, plcpickworkersimulator
 
 import logging
 log = logging.getLogger(__name__)
@@ -142,7 +142,7 @@ if __name__ == '__main__':
     example.Start()
 
     # start a network server instance for MUJIN controllers to connect to
-    server = plcserver.PLCServer(memory, 'tcp://*:5555')
+    server = plczmqserver.PLCZMQServer(memory, 'tcp://*:5555')
     server.Start()
     log.warn('server started.')
 

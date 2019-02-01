@@ -10,9 +10,9 @@ from . import plcmemory
 import logging
 log = logging.getLogger(__name__)
 
-class PLCServerSocket:
+class PLCZMQServerSocket:
     """
-    A ZMQ server socket implementation internally used by PLCServer.
+    A ZMQ server socket implementation internally used by PLCZMQServer.
     """
 
     _ctx = None # allocated zmq context, need to free
@@ -55,7 +55,7 @@ class PLCServerSocket:
     def Send(self, data):
         self._socket.send_json(data, zmq.NOBLOCK)
 
-class PLCServer:
+class PLCZMQServer:
     """
     A ZMQ server that hosts the PLC controller.
     """
@@ -109,7 +109,7 @@ class PLCServer:
         while self._isok:
             try:
                 if socket is None:
-                    socket = PLCServerSocket(self._endpoint, ctx=self._ctx)
+                    socket = PLCZMQServerSocket(self._endpoint, ctx=self._ctx)
 
                 if not socket.Poll(timeout=50):
                     continue
