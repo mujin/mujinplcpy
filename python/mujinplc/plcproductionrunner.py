@@ -16,6 +16,12 @@ class PLCMaterialHandler:
     """
     To be subclassed and implemented by customer.
     """
+    _moveLocation = None
+    _finishOrder = None
+
+    def __init__(self, moveLocation, finishOrder):
+        self._moveLocation = moveLocation
+        self._finishOrder = finishOrder
 
     async def MoveLocationAsync(self, locationIndex: int, expectedContainerId: str, expectedContainerType: str, orderUniqueId: str) -> typing.Tuple[str, str]:
         """
@@ -23,13 +29,17 @@ class PLCMaterialHandler:
         send request to agv to move, can return immediately even if agv has not started moving yet
         function should return a pair of actual containerId and containerType
         """
+        if self._moveLocation:
+            return self._moveLocation(locationIndex, expectedContainerId, expectedContainerType, orderUniqueId)
         return expectedContainerId, expectedContainerType
 
     async def FinishOrderAsync(self, orderUniqueId: str, orderCycleFinishCode: plclogic.PLCOrderCycleFinishCode, numPutInDestination: int) -> None:
         """
         when order status changed called by mujin
         """
-        return
+        if self._finishOrder:
+            self._finishOrder(orderUniqueId, orderCycleFinishCode, numPutInDestination)
+
 
 class PLCQueueOrderParameters(PLCDataObject):
     """
