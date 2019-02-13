@@ -216,13 +216,14 @@ class PLCController:
                     return True
 
             # check if all expectations are already met
-            met = True
-            for key, value in expectations.items():
-                if key not in self._state or self._state[key] != value:
-                    met = False
-                    break
-            if met:
-                return True
+            if expectations:
+                met = True
+                for key, value in expectations.items():
+                    if key not in self._state or self._state[key] != value:
+                        met = False
+                        break
+                if met:
+                    return True
 
             # wait for it to change
             if not self.WaitForAny(keyvalues, timeout=timeout):
