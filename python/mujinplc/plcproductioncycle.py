@@ -53,6 +53,8 @@ class PLCOrder(PLCDataObject):
     preparationFinishCode = PLCPreparationFinishCode.PreparationNotAvailable # type: PLCPreparationFinishCode
     finishOrderFinishCode = PLCFinishOrderFinishCode.NotAvailable # type: PLCFinishOrderFinishCode
 
+    ignoreFinishPosition = False # type: bool
+
     pickContainer = None # type: typing.Optional[PLCContainer]
     placeContainer = None # type: typing.Optional[PLCContainer]
 
@@ -315,6 +317,10 @@ class PLCProductionCycle:
                 'orderPlaceContainerId': order.placeContainerId,
                 'orderPlaceContainerType': order.placeContainerType,
 
+                'orderPackInputPartIndex': order.packInputPartIndex,
+                'orderPackFormationComputationName': order.packFormationComputationName,
+                'orderIgnoreFinishPosition': order.ignoreFinishPosition,
+
                 'startOrderCycle': True,
                 'stopOrderCycle': False,
             })
@@ -455,6 +461,10 @@ class PLCProductionCycle:
                 'preparationPlaceLocation': order.placeLocationIndex,
                 'preparationPlaceContainerId': order.placeContainerId,
                 'preparationPlaceContainerType': order.placeContainerType,
+
+                'preparationPackInputPartIndex': order.packInputPartIndex,
+                'preparationPackFormationComputationName': order.packFormationComputationName,
+                'preparationIgnoreFinishPosition': order.ignoreFinishPosition,
 
                 'startPreparation': True,
                 'stopPreparation': False,
@@ -630,6 +640,8 @@ class PLCProductionCycle:
 
                     packInputPartIndex = controller.GetInteger('queueOrderPackInputPartIndex'),
                     packFormationComputationName = controller.GetString('queueOrderPackFormationComputationName'),
+
+                    ignoreFinishPosition = controller.GetBoolean('queueOrderIgnoreFinishPosition'),
                 )
                 self._SetQueueOrderState(PLCQueueOrderState.Running, order)
 

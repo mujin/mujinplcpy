@@ -66,6 +66,8 @@ class PLCQueueOrderParameters(PLCDataObject):
     packInputPartIndex = 0 # type: int # when using packFormation, index of the part in the pack
     packFormationComputationName = '' # type: str # when using packFormation, name of the formation
 
+    ignoreFinishPosition = False # type: bool
+
 class PLCProductionCycleFinishCode(enum.IntEnum):
     """
     Finish code for the whole production cycle.
@@ -164,6 +166,7 @@ class PLCProductionRunner:
             'queueOrderPlaceContainerType': queueOrderParameters.placeContainerType,
             'queueOrderPackInputPartIndex': queueOrderParameters.packInputPartIndex,
             'queueOrderPackFormationComputationName': queueOrderParameters.packFormationComputationName,
+            'queueOrderIgnoreFinishPosition': queueOrderParameters.ignoreFinishPosition,
             'startQueueOrder': True,
         })
         try:
