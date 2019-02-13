@@ -529,7 +529,10 @@ class PLCProductionCycle:
                     log.info('popping no longer used container: %r', queue[0])
                     queue.pop(0)
 
-                request = PLCLocationRequest()
+                request = PLCLocationRequest(
+                    expectedContainerId = '*',
+                    expectedContainerType = '*',
+                )
                 if queue:
                     request = PLCLocationRequest(
                         expectedContainerId = queue[0].containerId,
