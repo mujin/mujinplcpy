@@ -44,7 +44,7 @@ class PLCOrder(PLCDataObject):
     placeContainerId = '' # type: str # barcode of the dest contianer, for example: 'pallet1'
     placeContainerType = '' # type: str # type of the source container, if all the same, set to ''
 
-    packInputPartIndex = 0 # type: int # when using packFormation, index of the part in the pack
+    inputPartIndex = 0 # type: int # when using packFormation, index of the part in the pack
     packFormationComputationName = '' # type: str # when using packFormation, name of the formation
 
     numPutInDestination = 0 # type: int
@@ -317,7 +317,7 @@ class PLCProductionCycle:
                 'orderPlaceContainerId': order.placeContainerId,
                 'orderPlaceContainerType': order.placeContainerType,
 
-                'orderPackInputPartIndex': order.packInputPartIndex,
+                'orderInputPartIndex': order.inputPartIndex,
                 'orderPackFormationComputationName': order.packFormationComputationName,
                 'orderIgnoreFinishPosition': order.ignoreFinishPosition,
 
@@ -462,7 +462,7 @@ class PLCProductionCycle:
                 'preparationPlaceContainerId': order.placeContainerId,
                 'preparationPlaceContainerType': order.placeContainerType,
 
-                'preparationPackInputPartIndex': order.packInputPartIndex,
+                'preparationInputPartIndex': order.inputPartIndex,
                 'preparationPackFormationComputationName': order.packFormationComputationName,
                 'preparationIgnoreFinishPosition': order.ignoreFinishPosition,
 
@@ -638,7 +638,7 @@ class PLCProductionCycle:
                     placeContainerId = controller.GetString('queueOrderPlaceContainerId'),
                     placeContainerType = controller.GetString('queueOrderPlaceContainerIndex'),
 
-                    packInputPartIndex = controller.GetInteger('queueOrderPackInputPartIndex'),
+                    inputPartIndex = controller.GetInteger('queueOrderInputPartIndex'),
                     packFormationComputationName = controller.GetString('queueOrderPackFormationComputationName'),
 
                     ignoreFinishPosition = controller.GetBoolean('queueOrderIgnoreFinishPosition'),

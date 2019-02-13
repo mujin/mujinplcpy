@@ -63,7 +63,7 @@ class PLCQueueOrderParameters(PLCDataObject):
     placeContainerId = '' # type: str # barcode of the dest contianer, for example: "pallet1"
     placeContainerType = '' # type: str # type of the source container, if all the same, set to ""
 
-    packInputPartIndex = 0 # type: int # when using packFormation, index of the part in the pack
+    inputPartIndex = 0 # type: int # when using packFormation, index of the part in the pack
     packFormationComputationName = '' # type: str # when using packFormation, name of the formation
 
     ignoreFinishPosition = False # type: bool
@@ -164,7 +164,7 @@ class PLCProductionRunner:
             'queueOrderPlaceLocationIndex': queueOrderParameters.placeLocationIndex,
             'queueOrderPlaceContainerId': queueOrderParameters.placeContainerId,
             'queueOrderPlaceContainerType': queueOrderParameters.placeContainerType,
-            'queueOrderPackInputPartIndex': queueOrderParameters.packInputPartIndex,
+            'queueOrderInputPartIndex': queueOrderParameters.inputPartIndex,
             'queueOrderPackFormationComputationName': queueOrderParameters.packFormationComputationName,
             'queueOrderIgnoreFinishPosition': queueOrderParameters.ignoreFinishPosition,
             'startQueueOrder': True,
