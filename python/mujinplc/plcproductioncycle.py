@@ -58,10 +58,7 @@ class PLCOrder(PLCDataObject):
     pickContainer = None # type: typing.Optional[PLCContainer]
     placeContainer = None # type: typing.Optional[PLCContainer]
 
-    isRunningOrderCycle = False # type: bool
-    isGrabbingTarget = False # type: bool
-    pickLocationReleased = False # type: bool
-    placeLocationReleased = False # type: bool
+    pickContainerReleased = False # type: bool
 
 class PLCContainer(PLCDataObject):
     """
@@ -382,19 +379,20 @@ class PLCProductionCycle:
             controller.Set('startOrderCycle', False)
 
             order = self._GetOrderCycleStateOrder()
-            order.isRunningOrderCycle = True
             order.orderCycleFinishCode = PLCOrderCycleFinishCode(controller.GetInteger('orderCycleFinishCode'))
             order.numPutInDestination = controller.GetInteger('numPutInDestination')
             order.numLeftInOrder = controller.GetInteger('numLeftInOrder')
-            order.isGrabbingTarget = controller.GetBoolean('isGrabbingTarget')
-            order.pickLocationReleased = controller.GetBoolean('location%dReleased' % order.pickLocationIndex)
-            order.placeLocationReleased = controller.GetBoolean('location%dReleased' % order.placeLocationIndex)
+            # check if we can release pick container early
+            if order.numLeftInOrder <= 1:
+                isGrabbingTarget = controller.GetBoolean('isGrabbingTarget')
+                pickLocationReleased = controller.GetBoolean('location%dReleased' % order.pickLocationIndex)
+                if pickLocationReleased and isGrabbingTarget:
+                    order.pickContainerReleased = True
 
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetOrderCycleState(PLCOrderCycleState.Stopping)
             elif not controller.GetBoolean('isRunningOrderCycle'):
                 # handle isError and orderCycleFinishCode here
-                order.isRunningOrderCycle = False
                 self._SetOrderCycleState(PLCOrderCycleState.Finish, order)
 
         if self._IsOrderCycleState(PLCOrderCycleState.Finish):
@@ -599,14 +597,9 @@ class PLCProductionCycle:
                 expectedContainer = None
                 if len(queue) > 0:
                     expectedContainer = queue[0]
-
-                    # if last order for the current container is almost done
-                    # 1. numLeftInOrder <= 1
-                    # 2. isGrabbingTarget == 1
-                    # 3. location%dReleased == 1
                     if len(queue[0].orders) == 1:
                         order = queue[0].orders[0]
-                        if order.isRunningOrderCycle and order.pickLocationIndex == locationIndex and order.pickLocationReleased and order.numLeftInOrder <= 1 and order.isGrabbingTarget:
+                        if order.pickContainer is queue[0] and order.pickContainerReleased:
                             # can consider next container now
                             expectedContainer = queue[1] if len(queue) > 1 else None
 
