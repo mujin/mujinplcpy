@@ -131,8 +131,12 @@ class PLCProductionRunner:
         self._thread = threading.Thread(target=self._RunThread, name='plcproductionrunner')
         self._thread.start()
 
-    def Stop(self) -> None:
+    def SetStop(self) -> None:
         self._isok = False
+
+    def Stop(self) -> None:
+        self.SetStop()
+
         if self._thread is not None:
             self._thread.join()
             self._thread = None
@@ -182,6 +186,8 @@ class PLCProductionRunner:
             controller.Set('startQueueOrder', False)
 
     def _RunThread(self) -> None:
+        productionCycleStarted = False
+
         # monitor startMoveLocationX and startFinishOrder, then spin threads to handle them
         controller = plccontroller.PLCController(self._memory)
 
@@ -202,7 +208,11 @@ class PLCProductionRunner:
                 # always start production cycle
                 if controller.SyncAndGetBoolean('isRunningProductionCycle'):
                     controller.Set('startProductionCycle', False)
+                    productionCycleStarted = True
                 else:
+                    if productionCycleStarted:
+                        log.error('production cycle stopped')
+                        break
                     controller.Set('startProductionCycle', True)
 
                 triggerSignals = {}
@@ -243,8 +253,9 @@ class PLCProductionRunner:
         finally:
             # stop the production cycle
             controller.Set('stopProductionCycle', True)
-            if not controller.WaitUntil('isRunningProductionCycle', False, timeout=5.0):
-                log.warn('failed to stop production cycle within five second')
+            for timeout in range(30):
+                if not controller.WaitUntil('isRunningProductionCycle', False, timeout=1.0):
+                    log.warn('failed to stop production cycle within %d second', timeout+1)
             controller.Set('stopProductionCycle', False)
 
     def _RunMoveLocationThread(self, locationIndex: int) -> None:
