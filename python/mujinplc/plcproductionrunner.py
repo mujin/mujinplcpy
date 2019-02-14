@@ -255,7 +255,7 @@ class PLCProductionRunner:
             controller.Set('stopProductionCycle', True)
             for timeout in range(30):
                 if not controller.WaitUntil('isRunningProductionCycle', False, timeout=1.0):
-                    log.warn('failed to stop production cycle within %d second', timeout+1)
+                    log.warn('failed to stop production cycle within %d second', timeout + 1)
             controller.Set('stopProductionCycle', False)
 
     def _RunMoveLocationThread(self, locationIndex: int) -> None:
@@ -285,26 +285,23 @@ class PLCProductionRunner:
 
             # run customer code
             actualContainerId, actualContainerType = loop.run_until_complete(self._materialHandler.MoveLocationAsync(locationIndex, expectedContainerId, expectedContainerType, orderUniqueId))
-
-            controller.WaitUntil('startMoveLocation%d' % locationIndex, False)
-
             finishCode = PLCMoveLocationFinishCode.Success
 
         except Exception as e:
             log.exception('moveLocation%d thread error: %s', locationIndex, e)
             finishCode = PLCMoveLocationFinishCode.GenericError
 
-        finally:
-            log.debug('moveLocation%d thread stopping', locationIndex)
-            controller.SetMultiple({
-                'moveLocation%dFinishCode' % locationIndex: int(finishCode),
-                'isRunningMoveLocation%d' % locationIndex: False,
-                'location%dContainerId' % locationIndex: actualContainerId,
-                'location%dContainerType' % locationIndex: actualContainerType,
-                'location%dProhibited' % locationIndex: False,
-            })
-            self._moveLocationThreads[locationIndex] = None
-            loop.close()
+        log.debug('moveLocation%d thread stopping', locationIndex)
+        controller.WaitUntil('startMoveLocation%d' % locationIndex, False)
+        controller.SetMultiple({
+            'moveLocation%dFinishCode' % locationIndex: int(finishCode),
+            'isRunningMoveLocation%d' % locationIndex: False,
+            'location%dContainerId' % locationIndex: actualContainerId,
+            'location%dContainerType' % locationIndex: actualContainerType,
+            'location%dProhibited' % locationIndex: False,
+        })
+        self._moveLocationThreads[locationIndex] = None
+        loop.close()
 
     def _RunFinishOrderThread(self) -> None:
         loop = asyncio.new_event_loop()
@@ -328,20 +325,17 @@ class PLCProductionRunner:
 
             # run customer code
             loop.run_until_complete(self._materialHandler.FinishOrderAsync(orderUniqueId, orderCycleFinishCode, numPutInDestination))
-
-            controller.WaitUntil('startFinishOrder', False)
-
             finishCode = PLCFinishOrderFinishCode.Success
 
         except Exception as e:
             log.exception('finishOrder thread error: %s', e)
             finishCode = PLCFinishOrderFinishCode.GenericError
 
-        finally:
-            log.debug('finishOrder thread stopping')
-            controller.SetMultiple({
-                'finishOrderFinishCode': int(finishCode),
-                'isRunningFinishOrder': False,
-            })
-            self._finishOrderThread = None
-            loop.close()
+        log.debug('finishOrder thread stopping')
+        controller.WaitUntil('startFinishOrder', False)
+        controller.SetMultiple({
+            'finishOrderFinishCode': int(finishCode),
+            'isRunningFinishOrder': False,
+        })
+        self._finishOrderThread = None
+        loop.close()
