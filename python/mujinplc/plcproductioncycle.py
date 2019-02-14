@@ -86,6 +86,7 @@ class PLCLocationRequest(PLCDataObject):
 class PLCProductionCycleState(enum.Enum):
     Idle = 'idle'
     Starting = 'starting'
+    Clearing = 'clearing'
     Running = 'running'
     Stopping = 'stopping'
     Stopped = 'stopped'
@@ -152,7 +153,7 @@ class PLCProductionCycle:
         self._preparationCycleState = (PLCPreparationCycleState.Idle, timestamp, None)
         self._locationStates = {}
         for locationIndex in self._locationIndices:
-            self._locationStates[locationIndex] = (PLCLocationState.Stopped, timestamp, None)
+            self._locationStates[locationIndex] = (PLCLocationState.Idle, timestamp, None)
         self._queueOrderState = (PLCQueueOrderState.Disabled, timestamp, None)
 
     def __del__(self):
@@ -206,14 +207,16 @@ class PLCProductionCycle:
         # we start out in the Stopped state
         # here we wait for startProductionCycle trigger
         if self._IsState(PLCProductionCycleState.Idle):
-            controller.Set('isRunningProductionCycle', False)
+            controller.SetMultiple({
+                'isRunningProductionCycle': False,
+                'clearState': False,
+            })
 
-            if controller.GetBoolean('startProductionCycle') and not controller.GetBoolean('stopProductionCycle'):
+            if controller.GetBoolean('startProductionCycle') and not controller.GetBoolean('stopProductionCycle') and not controller.GetBoolean('clearStatePerformed'):
                 # clear queue on start
                 self._ordersQueue = []
                 for locationIndex in self._locationIndices:
                     self._locationsQueue[locationIndex] = []
-
                 self._SetState(PLCProductionCycleState.Starting)
 
         # once startProductionCycle triggered
@@ -223,11 +226,25 @@ class PLCProductionCycle:
             controller.SetMultiple({
                 'isRunningProductionCycle': True,
                 'productionCycleFinishCode': int(PLCProductionCycleFinishCode.NotAvailable),
+                'clearState': False,
             })
 
             if controller.GetBoolean('stopProductionCycle'):
                 self._SetState(PLCProductionCycleState.Stopping)
             elif not controller.GetBoolean('startProductionCycle'):
+                self._SetState(PLCProductionCycleState.Clearing)
+
+        # clear state
+        if self._IsState(PLCProductionCycleState.Clearing):
+            controller.SetMultiple({
+                'isRunningProductionCycle': True,
+                'productionCycleFinishCode': int(PLCProductionCycleFinishCode.NotAvailable),
+                'clearState': True,
+            })
+
+            if controller.GetBoolean('stopProductionCycle'):
+                self._SetState(PLCProductionCycleState.Stopping, PLCProductionCycleFinishCode.Success)
+            elif controller.GetBoolean('clearStatePerformed'):
                 self._SetState(PLCProductionCycleState.Running)
 
         # this is the main running state, when the production cycle has started
@@ -235,7 +252,9 @@ class PLCProductionCycle:
             controller.SetMultiple({
                 'isRunningProductionCycle': True,
                 'productionCycleFinishCode': int(PLCProductionCycleFinishCode.NotAvailable),
+                'clearState': False,
             })
+
             hasError = False
             if self._IsOrderCycleState(PLCOrderCycleState.Error):
                 hasError = True
@@ -254,6 +273,7 @@ class PLCProductionCycle:
             controller.SetMultiple({
                 'isRunningProductionCycle': True,
                 'productionCycleFinishCode': int(finishCode),
+                'clearState': True,
             })
 
             # check if everything is stopped, then transition to stopped state
@@ -276,6 +296,7 @@ class PLCProductionCycle:
             controller.SetMultiple({
                 'isRunningProductionCycle': False,
                 'productionCycleFinishCode': int(finishCode),
+                'clearState': True,
             })
 
             if not controller.GetBoolean('stopProductionCycle'):
