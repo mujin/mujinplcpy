@@ -273,7 +273,7 @@ class PLCProductionCycle:
             controller.SetMultiple({
                 'isRunningProductionCycle': True,
                 'productionCycleFinishCode': int(finishCode),
-                'clearState': True,
+                'clearState': False,
             })
 
             # check if everything is stopped, then transition to stopped state
@@ -296,7 +296,7 @@ class PLCProductionCycle:
             controller.SetMultiple({
                 'isRunningProductionCycle': False,
                 'productionCycleFinishCode': int(finishCode),
-                'clearState': True,
+                'clearState': False,
             })
 
             if not controller.GetBoolean('stopProductionCycle'):
