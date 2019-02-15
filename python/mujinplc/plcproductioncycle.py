@@ -149,7 +149,7 @@ class PLCProductionCycle:
         self._locationsQueue = {}
 
         timestamp = time.monotonic()
-        self._state = (PLCProductionCycleState.Idle,timestamp, PLCProductionCycleFinishCode.NotAvailable)
+        self._state = (PLCProductionCycleState.Idle, timestamp, PLCProductionCycleFinishCode.NotAvailable)
         self._orderCycleState = (PLCOrderCycleState.Idle, timestamp, None)
         self._preparationCycleState = (PLCPreparationCycleState.Idle, timestamp, None)
         self._locationStates = {}
