@@ -66,12 +66,12 @@ class PLCMemory:
 
 class PLCMemoryLogger:
 
-    _prefix = '' # type: str
+    _logPrefix = '' # type: str
     _ignoredKeys = None # type: typing.Iterable[str]
 
-    def __init__(self, memory: PLCMemory, ignoredKeys: typing.Optional[typing.Iterable[str]] = None, prefix: str = ''):
+    def __init__(self, memory: PLCMemory, ignoredKeys: typing.Optional[typing.Iterable[str]] = None, logPrefix: str = ''):
         self._ignoredKeys = ignoredKeys or []
-        self._prefix = prefix
+        self._logPrefix = logPrefix
         memory.AddObserver(self)
 
     def MemoryModified(self, modifications: typing.Mapping[str, PLCMemory.ValueType]) -> None:
@@ -79,4 +79,4 @@ class PLCMemoryLogger:
         for key in self._ignoredKeys:
             modificationsCopy.pop(key, None)
         if modificationsCopy:
-            log.debug('%s%r', self._prefix, modificationsCopy)
+            log.debug('%s%r', self._logPrefix, modificationsCopy)

@@ -59,6 +59,7 @@ class PLCOrder(PLCDataObject):
     placeContainer = None # type: typing.Optional[PLCContainer]
 
     pickContainerReleased = False # type: bool
+    placeContainerReleased = False # type: bool
 
 class PLCContainer(PLCDataObject):
     """
@@ -83,13 +84,13 @@ class PLCLocationRequest(PLCDataObject):
 class PLCProductionCycleState(enum.Enum):
     Idle = 'idle'
     Starting = 'starting'
-    Clearing = 'clearing'
     Running = 'running'
     Stopping = 'stopping'
     Stopped = 'stopped'
 
 class PLCOrderCycleState(enum.Enum):
     Idle = 'idle'
+    Resetting = 'resetting'
     Starting = 'starting'
     Running = 'running'
     Finish = 'finish'
@@ -101,6 +102,7 @@ class PLCOrderCycleState(enum.Enum):
 
 class PLCPreparationCycleState(enum.Enum):
     Idle = 'idle'
+    Resetting = 'resetting'
     Starting = 'starting'
     Running = 'running'
     Stopping = 'stopping'
@@ -123,6 +125,8 @@ class PLCQueueOrderState(enum.Enum):
 class PLCProductionCycle:
 
     _memory = None # type: plcmemory.PLCMemory # an instance of PLCMemory
+    _logPrefix = '' # type: str
+
     _locationIndices = None # type: typing.List[int]
     _ordersQueue = None # type: typing.List[PLCOrder]
     _locationsQueue = None # type: typing.Dict[int, typing.List[PLCContainer]]
@@ -134,23 +138,21 @@ class PLCProductionCycle:
     _queueOrderState = None # type: typing.Tuple[PLCQueueOrderState, float, typing.Optional[PLCOrder]]
     _locationStates = None # type: typing.Dict[int, typing.Tuple[PLCLocationState, float, typing.Optional[PLCLocationRequest]]]
     _lastPreparedOrder = None # type: typing.Optional[PLCOrder]
+    _clearStatePerformed = False # type: bool
 
-    def __init__(self, memory: plcmemory.PLCMemory, maxLocationIndex: int = 4):
+    def __init__(self, memory: plcmemory.PLCMemory, logPrefix: str = ''):
         self._memory = memory
-        self._locationIndices = list(range(1, maxLocationIndex + 1))
+        self._logPrefix = logPrefix
+
+        self._locationIndices = []
         self._ordersQueue = []
         self._locationsQueue = {}
-        for locationIndex in self._locationIndices:
-            self._locationsQueue[locationIndex] = []
 
-        # initialize the states
         timestamp = time.monotonic()
-        self._state = (PLCProductionCycleState.Idle, timestamp, PLCProductionCycleFinishCode.NotAvailable)
+        self._state = (PLCProductionCycleState.Idle,timestamp, PLCProductionCycleFinishCode.NotAvailable)
         self._orderCycleState = (PLCOrderCycleState.Idle, timestamp, None)
         self._preparationCycleState = (PLCPreparationCycleState.Idle, timestamp, None)
         self._locationStates = {}
-        for locationIndex in self._locationIndices:
-            self._locationStates[locationIndex] = (PLCLocationState.Idle, timestamp, None)
         self._queueOrderState = (PLCQueueOrderState.Disabled, timestamp, None)
 
     def __del__(self):
@@ -191,7 +193,7 @@ class PLCProductionCycle:
         if self._IsState(state):
             return
         timestamp = time.monotonic()
-        log.info('%s (%s) -> %s (%s), elapsed %.03fs', self._state[0], self._state[2], state, finishCode, timestamp - self._state[1])
+        log.info('%s%s (%s) -> %s (%s), elapsed %.03fs', self._logPrefix, self._state[0], self._state[2], state, finishCode, timestamp - self._state[1])
         self._state = (state, timestamp, finishCode)
 
     def _IsState(self, *states: PLCProductionCycleState) -> bool:
@@ -206,14 +208,31 @@ class PLCProductionCycle:
         if self._IsState(PLCProductionCycleState.Idle):
             controller.SetMultiple({
                 'isRunningProductionCycle': False,
-                'clearState': False,
             })
 
-            if controller.GetBoolean('startProductionCycle') and not controller.GetBoolean('stopProductionCycle') and not controller.GetBoolean('clearStatePerformed'):
-                # clear queue on start
+            if controller.GetBoolean('startProductionCycle') and not controller.GetBoolean('stopProductionCycle'):
+
+                productionCycleMaxLocationIndex = controller.GetInteger('productionCycleMaxLocationIndex')
+                if productionCycleMaxLocationIndex < 1:
+                    log.error('%sunsupported max location index: %d', self._logPrefix, productionCycleMaxLocationIndex)
+                    self._SetState(PLCProductionCycleState.Stopping, PLCProductionCycleFinishCode.GenericError)
+
+                self._locationIndices = list(range(1, productionCycleMaxLocationIndex + 1))
+
+                # reset queues
                 self._ordersQueue = []
+                self._locationsQueue = {}
                 for locationIndex in self._locationIndices:
                     self._locationsQueue[locationIndex] = []
+
+                # reset states
+                timestamp = time.monotonic()
+                self._locationStates = {}
+                for locationIndex in self._locationIndices:
+                    self._locationStates[locationIndex] = (PLCLocationState.Stopped, timestamp, None)
+
+                self._clearStatePerformed = False
+
                 self._SetState(PLCProductionCycleState.Starting)
 
         # once startProductionCycle triggered
@@ -223,25 +242,11 @@ class PLCProductionCycle:
             controller.SetMultiple({
                 'isRunningProductionCycle': True,
                 'productionCycleFinishCode': int(PLCProductionCycleFinishCode.NotAvailable),
-                'clearState': False,
             })
 
             if controller.GetBoolean('stopProductionCycle'):
                 self._SetState(PLCProductionCycleState.Stopping)
             elif not controller.GetBoolean('startProductionCycle'):
-                self._SetState(PLCProductionCycleState.Clearing)
-
-        # clear state
-        if self._IsState(PLCProductionCycleState.Clearing):
-            controller.SetMultiple({
-                'isRunningProductionCycle': True,
-                'productionCycleFinishCode': int(PLCProductionCycleFinishCode.NotAvailable),
-                'clearState': True,
-            })
-
-            if controller.GetBoolean('stopProductionCycle'):
-                self._SetState(PLCProductionCycleState.Stopping, PLCProductionCycleFinishCode.Success)
-            elif controller.GetBoolean('clearStatePerformed'):
                 self._SetState(PLCProductionCycleState.Running)
 
         # this is the main running state, when the production cycle has started
@@ -249,7 +254,6 @@ class PLCProductionCycle:
             controller.SetMultiple({
                 'isRunningProductionCycle': True,
                 'productionCycleFinishCode': int(PLCProductionCycleFinishCode.NotAvailable),
-                'clearState': False,
             })
 
             hasError = False
@@ -270,20 +274,23 @@ class PLCProductionCycle:
             controller.SetMultiple({
                 'isRunningProductionCycle': True,
                 'productionCycleFinishCode': int(finishCode),
-                'clearState': False,
             })
 
             # check if everything is stopped, then transition to stopped state
             allFinished = True
             if not self._IsOrderCycleState(PLCOrderCycleState.Stopped):
                 allFinished = False
+                # log.debug('%swaiting for order cycle to stop', self._logPrefix)
             if not self._IsPreparationCycleState(PLCPreparationCycleState.Stopped):
                 allFinished = False
+                # log.debug('%swaiting for preparation cycle to stop', self._logPrefix)
             for locationIndex in self._locationIndices:
                 if not self._IsLocationState(locationIndex, PLCLocationState.Stopped):
                     allFinished = False
+                    # log.debug('%swaiting for location%d to stop', self._logPrefix, locationIndex)
             if not self._IsQueueOrderState(PLCQueueOrderState.Disabled):
                 allFinished = False
+                # log.debug('%swaiting for queue order to stop', self._logPrefix)
             if allFinished:
                 self._SetState(PLCProductionCycleState.Stopped, finishCode)
 
@@ -293,7 +300,6 @@ class PLCProductionCycle:
             controller.SetMultiple({
                 'isRunningProductionCycle': False,
                 'productionCycleFinishCode': int(finishCode),
-                'clearState': False,
             })
 
             if not controller.GetBoolean('stopProductionCycle'):
@@ -307,7 +313,7 @@ class PLCProductionCycle:
         if self._IsOrderCycleState(state):
             return
         timestamp = time.monotonic()
-        log.info('%s (%r) -> %s (%r), elapsed %.03fs', self._orderCycleState[0], self._orderCycleState[2], state, order, timestamp - self._orderCycleState[1])
+        log.info('%s%s (%r) -> %s (%r), elapsed %.03fs', self._logPrefix, self._orderCycleState[0], self._orderCycleState[2], state, order, timestamp - self._orderCycleState[1])
         self._orderCycleState = (state, timestamp, order)
 
     def _IsOrderCycleState(self, *states: PLCOrderCycleState) -> bool:
@@ -325,7 +331,7 @@ class PLCProductionCycle:
             elif not controller.GetBoolean('isModeAuto') or not controller.GetBoolean('isSystemReady') or not controller.GetBoolean('isCycleReady'):
                 # need to wait until starting condition is met
                 pass
-            elif self._IsPreparationCycleState(PLCPreparationCycleState.Starting, PLCPreparationCycleState.Running):
+            elif self._IsPreparationCycleState(PLCPreparationCycleState.Resetting, PLCPreparationCycleState.Starting, PLCPreparationCycleState.Running):
                 # if preparation is running, need to wait for it to finish
                 pass
             else:
@@ -336,7 +342,20 @@ class PLCProductionCycle:
                     candidate = self._GetOrderCandidate()
 
                 if candidate:
-                    self._SetOrderCycleState(PLCOrderCycleState.Starting, candidate)
+                    if not self._clearStatePerformed:
+                        self._SetOrderCycleState(PLCOrderCycleState.Resetting, candidate)
+                    else:
+                        self._SetOrderCycleState(PLCOrderCycleState.Starting, candidate)
+
+        if self._IsOrderCycleState(PLCOrderCycleState.Resetting):
+            order = self._GetOrderCycleStateOrder()
+            controller.Set('clearState', True)
+
+            if not self._IsState(PLCProductionCycleState.Running):
+                self._SetOrderCycleState(PLCOrderCycleState.Stopping)
+            elif controller.GetBoolean('clearStatePerformed'):
+                self._clearStatePerformed = True
+                self._SetOrderCycleState(PLCOrderCycleState.Starting, order)
 
         if self._IsOrderCycleState(PLCOrderCycleState.Starting):
             order = self._GetOrderCycleStateOrder()
@@ -365,6 +384,7 @@ class PLCProductionCycle:
 
                 'startOrderCycle': True,
                 'stopOrderCycle': False,
+                'clearState': False,
             })
 
             if not self._IsState(PLCProductionCycleState.Running):
@@ -382,12 +402,18 @@ class PLCProductionCycle:
             order.orderCycleFinishCode = PLCOrderCycleFinishCode(controller.GetInteger('orderCycleFinishCode'))
             order.numPutInDestination = controller.GetInteger('numPutInDestination')
             order.numLeftInOrder = controller.GetInteger('numLeftInOrder')
+            isGrabbingTarget = controller.GetBoolean('isGrabbingTarget')
             # check if we can release pick container early
-            if order.numLeftInOrder <= 1:
-                isGrabbingTarget = controller.GetBoolean('isGrabbingTarget')
+            if order.numLeftInOrder <= 1 and isGrabbingTarget:
                 pickLocationReleased = controller.GetBoolean('location%dReleased' % order.pickLocationIndex)
-                if pickLocationReleased and isGrabbingTarget:
+                if pickLocationReleased:
                     order.pickContainerReleased = True
+
+            # check if we can release place container early
+            if order.numLeftInOrder == 0 and not isGrabbingTarget:
+                placeLocationReleased = controller.GetBoolean('location%dReleased' % order.placeLocationIndex)
+                if placeLocationReleased:
+                    order.placeContainerReleased = True
 
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetOrderCycleState(PLCOrderCycleState.Stopping)
@@ -437,6 +463,7 @@ class PLCProductionCycle:
                 'stopImmediately': True,
                 'stopOrderCycle': True,
                 'startOrderCycle': False,
+                'clearState': False,
             })
 
             if not controller.GetBoolean('isRunningOrderCycle'):
@@ -447,6 +474,7 @@ class PLCProductionCycle:
                 'stopImmediately': False,
                 'stopOrderCycle': False,
                 'startOrderCycle': False,
+                'clearState': False,
             })
 
             if self._IsState(PLCProductionCycleState.Running):
@@ -464,7 +492,7 @@ class PLCProductionCycle:
         if self._IsPreparationCycleState(state):
             return
         timestamp = time.monotonic()
-        log.info('%s (%r) -> %s (%r), elapsed %.03fs', self._preparationCycleState[0], self._preparationCycleState[2], state, order, timestamp - self._preparationCycleState[1])
+        log.info('%s%s (%r) -> %s (%r), elapsed %.03fs', self._logPrefix, self._preparationCycleState[0], self._preparationCycleState[2], state, order, timestamp - self._preparationCycleState[1])
         self._preparationCycleState = (state, timestamp, order)
 
     def _IsPreparationCycleState(self, *states: PLCPreparationCycleState) -> bool:
@@ -482,7 +510,7 @@ class PLCProductionCycle:
             elif not controller.GetBoolean('isModeAuto') or not controller.GetBoolean('isSystemReady'):
                 # need to wait until starting condition is met
                 pass
-            elif not self._IsOrderCycleState(PLCOrderCycleState.Starting):
+            elif not self._IsOrderCycleState(PLCOrderCycleState.Resetting, PLCOrderCycleState.Starting):
                 # when the order cycle is nost just starting, we can consider whether to start next preparation
 
                 # see if we have a current running order
@@ -494,7 +522,20 @@ class PLCProductionCycle:
                 if candidate and candidate is not self._lastPreparedOrder:
                     # found a new order that we should be preparing for
                     self._lastPreparedOrder = None
-                    self._SetPreparationCycleState(PLCPreparationCycleState.Starting, candidate)
+                    if not self._clearStatePerformed:
+                        self._SetPreparationCycleState(PLCPreparationCycleState.Resetting, candidate)
+                    else:
+                        self._SetPreparationCycleState(PLCPreparationCycleState.Starting, candidate)
+
+        if self._IsPreparationCycleState(PLCPreparationCycleState.Resetting):
+            order = self._GetPreparationCycleStateOrder()
+            controller.Set('clearState', True)
+
+            if not self._IsState(PLCProductionCycleState.Running):
+                self._SetPreparationCycleState(PLCPreparationCycleState.Stopping)
+            elif controller.GetBoolean('clearStatePerformed'):
+                self._clearStatePerformed = True
+                self._SetPreparationCycleState(PLCPreparationCycleState.Starting, order)
 
         if self._IsPreparationCycleState(PLCPreparationCycleState.Starting):
             order = self._GetPreparationCycleStateOrder()
@@ -523,6 +564,7 @@ class PLCProductionCycle:
 
                 'startPreparation': True,
                 'stopPreparation': False,
+                'clearState': False,
             })
 
             if not self._IsState(PLCProductionCycleState.Running):
@@ -546,6 +588,7 @@ class PLCProductionCycle:
             controller.SetMultiple({
                 'stopPreparation': True,
                 'startPreparation': False,
+                'clearState': False,
             })
 
             if not controller.GetBoolean('isRunningPreparation'):
@@ -555,6 +598,7 @@ class PLCProductionCycle:
             controller.SetMultiple({
                 'stopPreparation': False,
                 'startPreparation': False,
+                'clearState': False,
             })
 
             if self._IsState(PLCProductionCycleState.Running):
@@ -568,7 +612,7 @@ class PLCProductionCycle:
         if self._IsLocationState(locationIndex, state):
             return
         timestamp = time.monotonic()
-        log.info('location%d, %s (%r) -> %s (%r), elapsed %.03fs', locationIndex, self._locationStates[locationIndex][0], self._locationStates[locationIndex][2], state, request, timestamp - self._locationStates[locationIndex][1])
+        log.info('%slocation%d, %s (%r) -> %s (%r), elapsed %.03fs', self._logPrefix, locationIndex, self._locationStates[locationIndex][0], self._locationStates[locationIndex][2], state, request, timestamp - self._locationStates[locationIndex][1])
         self._locationStates[locationIndex] = (state, timestamp, request)
 
     def _IsLocationState(self, locationIndex: int, *states: PLCLocationState) -> bool:
@@ -591,17 +635,24 @@ class PLCProductionCycle:
                     if queue[0].orders:
                         break
                     # container has finished its usage, okay to move away
-                    log.info('popping no longer used container: %r', queue[0])
+                    log.info('%spopping no longer used container: %r', self._logPrefix, queue[0])
                     queue.pop(0)
 
-                expectedContainer = None
-                if len(queue) > 0:
-                    expectedContainer = queue[0]
-                    if len(queue[0].orders) == 1:
-                        order = queue[0].orders[0]
-                        if order.pickContainer is queue[0] and order.pickContainerReleased:
-                            # can consider next container now
-                            expectedContainer = queue[1] if len(queue) > 1 else None
+                # expected container is next container on the queue for the location
+                expectedContainer = queue[0] if len(queue) > 0 else None
+
+                # if the next container has only one order then it may be released early
+                if expectedContainer and len(expectedContainer.orders) == 1:
+                    order = expectedContainer.orders[0]
+                    # if the last order using this container has released the pick container or place container
+                    # then we should pick second container on the location queue as our next container
+                    released = False
+                    if order.pickContainer is expectedContainer and order.pickContainerReleased:
+                        released = True
+                    if order.placeContainer is expectedContainer and order.placeContainerReleased:
+                        released = True
+                    if released:
+                        expectedContainer = queue[1] if len(queue) > 1 else None
 
                 request = PLCLocationRequest(
                     expectedContainerId = '*',
@@ -671,7 +722,7 @@ class PLCProductionCycle:
         if self._IsQueueOrderState(state):
             return
         timestamp = time.monotonic()
-        log.info('%s (%r) -> %s (%r), elapsed %.03fs', self._queueOrderState[0], self._queueOrderState[2], state, order, timestamp - self._queueOrderState[1])
+        log.info('%s%s (%r) -> %s (%r), elapsed %.03fs', self._logPrefix, self._queueOrderState[0], self._queueOrderState[2], state, order, timestamp - self._queueOrderState[1])
         self._queueOrderState = (state, timestamp, order)
 
     def _IsQueueOrderState(self, *states: PLCQueueOrderState) -> bool:
@@ -767,7 +818,7 @@ class PLCProductionCycle:
                 # add the order to queue
                 self._ordersQueue.append(order)
                 self._SetQueueOrderState(PLCQueueOrderState.Succeeded)
-                log.warn('order queued on production cycle: %r', order)
+                log.warn('%sorder queued on production cycle: %r', self._logPrefix, order)
 
         # succeeded queuing, need to set finish code
         if self._IsQueueOrderState(PLCQueueOrderState.Succeeded):

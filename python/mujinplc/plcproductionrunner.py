@@ -108,16 +108,19 @@ class PLCProductionRunner:
     _memory = None # type: plcmemory.PLCMemory # an instance of PLCMemory
     _materialHandler = None # type: PLCMaterialHandler # an instance of PLCMaterialHandler, supplied by customer
     _locationIndices = None # type: typing.List[int]
+    _logPrefix = '' # type: str
 
     _isok = False # type: bool
     _thread = None # type: typing.Optional[threading.Thread]
     _finishOrderThread = None # type: typing.Optional[threading.Thread]
     _moveLocationThreads = None # type: typing.Dict[int, typing.Optional[threading.Thread]]
 
-    def __init__(self, memory: plcmemory.PLCMemory, materialHandler: PLCMaterialHandler, maxLocationIndex: int = 4):
+    def __init__(self, memory: plcmemory.PLCMemory, materialHandler: PLCMaterialHandler, maxLocationIndex: int = 4, logPrefix: str = ''):
         self._memory = memory
         self._materialHandler = materialHandler
+        assert(maxLocationIndex > 0)
         self._locationIndices = list(range(1, maxLocationIndex + 1))
+        self._logPrefix = logPrefix
         self._moveLocationThreads = {}
 
     def __del__(self):
@@ -181,7 +184,7 @@ class PLCProductionRunner:
             finishCode = PLCQueueOrderFinishCode(controller.GetInteger('queueOrderFinishCode'))
             if finishCode != PLCQueueOrderFinishCode.Success:
                 raise Exception('QueueOrder failed with finish code: %r' % finishCode)
-            log.warn('successfully queued order: %s: %r', orderUniqueId, queueOrderParameters)
+            log.warn('%ssuccessfully queued order: %s: %r', self._logPrefix, orderUniqueId, queueOrderParameters)
         finally:
             controller.Set('startQueueOrder', False)
 
@@ -211,9 +214,12 @@ class PLCProductionRunner:
                     productionCycleStarted = True
                 else:
                     if productionCycleStarted:
-                        log.error('production cycle stopped')
+                        log.error('%sproduction cycle stopped', self._logPrefix)
                         break
-                    controller.Set('startProductionCycle', True)
+                    controller.SetMultiple({
+                        'productionCycleMaxLocationIndex': max(self._locationIndices),
+                        'startProductionCycle': True,
+                    })
 
                 triggerSignals = {}
                 for locationIndex in self._locationIndices:
@@ -237,25 +243,25 @@ class PLCProductionRunner:
                         continue
                     if not controller.GetBoolean(triggerSignal):
                         continue
-                    log.debug('starting a thread to handle %s', triggerSignal)
+                    log.debug('%sstarting a thread to handle %s', self._logPrefix, triggerSignal)
                     thread = threading.Thread(target=self._RunMoveLocationThread, args=(locationIndex,), name='moveLocation%d' % locationIndex)
                     thread.start()
                     self._moveLocationThreads[locationIndex] = thread
 
                 triggerSignal = 'startFinishOrder'
                 if triggerSignal in triggerSignals and controller.GetBoolean(triggerSignal):
-                    log.debug('starting a thread to handle %s', triggerSignal)
+                    log.debug('%sstarting a thread to handle %s', self._logPrefix, triggerSignal)
                     thread = threading.Thread(target=self._RunFinishOrderThread, name='finishOrder')
                     thread.start()
                     self._finishOrderThread = thread
         except Exception as e:
-            log.exception('caught exception while running the monitor thread for production runner: %s', e)
+            log.exception('%scaught exception while running the monitor thread for production runner: %s', self._logPrefix, e)
         finally:
             # stop the production cycle
             controller.Set('stopProductionCycle', True)
             for timeout in range(30):
                 if not controller.WaitUntil('isRunningProductionCycle', False, timeout=1.0):
-                    log.warn('failed to stop production cycle within %d second', timeout + 1)
+                    log.warn('%sfailed to stop production cycle within %d second', self._logPrefix, timeout + 1)
             controller.Set('stopProductionCycle', False)
 
     def _RunMoveLocationThread(self, locationIndex: int) -> None:
@@ -288,20 +294,21 @@ class PLCProductionRunner:
             finishCode = PLCMoveLocationFinishCode.Success
 
         except Exception as e:
-            log.exception('moveLocation%d thread error: %s', locationIndex, e)
+            log.exception('%smoveLocation%d thread error: %s', self._logPrefix, locationIndex, e)
             finishCode = PLCMoveLocationFinishCode.GenericError
 
-        log.debug('moveLocation%d thread stopping', locationIndex)
-        controller.WaitUntil('startMoveLocation%d' % locationIndex, False)
-        controller.SetMultiple({
-            'moveLocation%dFinishCode' % locationIndex: int(finishCode),
-            'isRunningMoveLocation%d' % locationIndex: False,
-            'location%dContainerId' % locationIndex: actualContainerId,
-            'location%dContainerType' % locationIndex: actualContainerType,
-            'location%dProhibited' % locationIndex: False,
-        })
-        self._moveLocationThreads[locationIndex] = None
-        loop.close()
+        finally:
+            log.debug('%smoveLocation%d thread stopping', self._logPrefix, locationIndex)
+            controller.WaitUntil('startMoveLocation%d' % locationIndex, False)
+            controller.SetMultiple({
+                'moveLocation%dFinishCode' % locationIndex: int(finishCode),
+                'isRunningMoveLocation%d' % locationIndex: False,
+                'location%dContainerId' % locationIndex: actualContainerId,
+                'location%dContainerType' % locationIndex: actualContainerType,
+                'location%dProhibited' % locationIndex: False,
+            })
+            self._moveLocationThreads[locationIndex] = None
+            loop.close()
 
     def _RunFinishOrderThread(self) -> None:
         loop = asyncio.new_event_loop()
@@ -328,14 +335,15 @@ class PLCProductionRunner:
             finishCode = PLCFinishOrderFinishCode.Success
 
         except Exception as e:
-            log.exception('finishOrder thread error: %s', e)
+            log.exception('%sfinishOrder thread error: %s', self._logPrefix, e)
             finishCode = PLCFinishOrderFinishCode.GenericError
 
-        log.debug('finishOrder thread stopping')
-        controller.WaitUntil('startFinishOrder', False)
-        controller.SetMultiple({
-            'finishOrderFinishCode': int(finishCode),
-            'isRunningFinishOrder': False,
-        })
-        self._finishOrderThread = None
-        loop.close()
+        finally:
+            log.debug('%sfinishOrder thread stopping', self._logPrefix)
+            controller.WaitUntil('startFinishOrder', False)
+            controller.SetMultiple({
+                'finishOrderFinishCode': int(finishCode),
+                'isRunningFinishOrder': False,
+            })
+            self._finishOrderThread = None
+            loop.close()

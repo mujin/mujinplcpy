@@ -32,12 +32,18 @@ class PLCPickWorkerOrder(PLCDataObject):
 class PLCPickWorkerBackend:
 
     _memory = None # type: plcmemory.PLCMemory
+    _logPrefix = '' # type: str
     _preparedOrder = None # type: typing.Optional[PLCPickWorkerOrder]
+    _clearStatePerformed = False # type: bool
 
-    def __init__(self, memory: plcmemory.PLCMemory):
+    def __init__(self, memory: plcmemory.PLCMemory, logPrefix: str = ''):
         self._memory = memory
+        self._logPrefix = logPrefix
 
     async def RunOrderCycleAsync(self, order: PLCPickWorkerOrder) -> PLCOrderCycleStatus:
+        if not self._clearStatePerformed:
+            log.error('%srunning order cycle without first clearing state', self._logPrefix)
+
         controller = plccontroller.PLCController(self._memory)
 
         isPrepared = False
@@ -55,10 +61,12 @@ class PLCPickWorkerBackend:
             isPrepared = True
             self._preparedOrder = None
 
-        log.warn('running order cycle: %r, isPrepared = %r', order, isPrepared)
+        log.warn('%srunning order cycle: %r, isPrepared = %r', self._logPrefix, order, isPrepared)
         while True:
             await asyncio.sleep(0.2)
             controller.Sync()
+            if controller.GetBoolean('stopOrderCycle'):
+                raise Exception('Interrupted')
             if controller.GetString('location%dProhibited' % order.pickLocationIndex):
                 continue
             if controller.GetString('location%dProhibited' % order.placeLocationIndex):
@@ -72,12 +80,19 @@ class PLCPickWorkerBackend:
             if controller.GetString('location%dContainerType' % order.placeLocationIndex) != order.placeContainerType:
                 continue
             break
-        log.info('containers in position for order cycle')
+        log.info('%scontainers in position for order cycle', self._logPrefix)
         if not isPrepared:
-            await asyncio.sleep(5)
+            for timeout in range(5):
+                if controller.SyncAndGetBoolean('stopOrderCycle'):
+                    raise Exception('Interrupted')
+            await asyncio.sleep(1)
+
         controller.Set('isRobotMoving', True)
         for numPutInDestination in range(1, order.orderNumber + 1):
-            await asyncio.sleep(5)
+            for timeout in range(3):
+                if controller.SyncAndGetBoolean('stopOrderCycle'):
+                    raise Exception('Interrupted')
+                await asyncio.sleep(1)
             controller.SetMultiple({
                 'numPutInDestination': numPutInDestination,
                 'numLeftInOrder': order.orderNumber - numPutInDestination,
@@ -91,14 +106,19 @@ class PLCPickWorkerBackend:
         )
 
     async def RunPreparationCycleAsync(self, order: PLCPickWorkerOrder) -> PLCPreparationCycleStatus:
+        if not self._clearStatePerformed:
+            log.error('%srunning preparation without first clearing state', self._logPrefix)
+
         controller = plccontroller.PLCController(self._memory)
 
         self._preparedOrder = None
 
-        log.warn('running preparation: %r', order)
+        log.warn('%srunning preparation: %r', self._logPrefix, order)
         while True:
             await asyncio.sleep(0.2)
             controller.Sync()
+            if controller.GetBoolean('stopPreparation'):
+                raise Exception('Interrupted')
             if controller.GetString('location%dProhibited' % order.pickLocationIndex):
                 continue
             if controller.GetString('location%dProhibited' % order.placeLocationIndex):
@@ -112,31 +132,42 @@ class PLCPickWorkerBackend:
             if controller.GetString('location%dContainerType' % order.placeLocationIndex) != order.placeContainerType:
                 continue
             break
-        log.info('containers in position for preparation')
+        log.info('%scontainers in position for preparation', self._logPrefix)
 
-        await asyncio.sleep(4)
+        for timeout in range(4):
+            if controller.SyncAndGetBoolean('stopPreparation'):
+                raise Exception('Interrupted')
+            await asyncio.sleep(1)
+
         self._preparedOrder = order
         return PLCPreparationCycleStatus(
             preparationFinishCode = PLCPreparationFinishCode.PreparationFinishedSuccess,
         )
 
     async def ResetError(self) -> None:
-        log.debug('')
+        log.debug('%sreset error', self._logPrefix)
+
+    async def ClearState(self) -> None:
+        log.debug('%sclear state', self._logPrefix)
+        self._clearStatePerformed = True
 
 class PLCPickWorkerSimulator:
 
     _memory = None # type: plcmemory.PLCMemory
+    _logPrefix = '' # type: str
     _backend = None # type: PLCPickWorkerBackend
 
     _isok = False # type: bool
     _thread = None # type: typing.Optional[threading.Thread]
     _threads = None # type: typing.Dict[str, typing.Optional[threading.Thread]]
 
-    def __init__(self, memory: plcmemory.PLCMemory, backend: typing.Optional[PLCPickWorkerBackend] = None):
+    def __init__(self, memory: plcmemory.PLCMemory, logPrefix: str = '', backend: typing.Optional[PLCPickWorkerBackend] = None):
         self._memory = memory
-        self._backend = backend or PLCPickWorkerBackend(memory)
+        self._logPrefix = logPrefix
+        self._backend = backend or PLCPickWorkerBackend(memory, logPrefix=logPrefix)
         self._threads = {
             'resetError': None,
+            'clearState': None,
             'startOrderCycle': None,
             'startPreparation': None,
         }
@@ -191,12 +222,13 @@ class PLCPickWorkerSimulator:
 
             triggerMapping = {
                 'resetError': self._RunResetErrorThread,
+                'clearState': self._RunClearStateThread,
                 'startOrderCycle': self._RunOrderCycleThread,
                 'startPreparation': self._RunPreparationCycleThread,
             }
             for triggerSignal, target in triggerMapping.items():
                 if triggerSignal in triggerSignals and controller.GetBoolean(triggerSignal):
-                    log.debug('starting a thread to handle: %s', triggerSignal)
+                    log.debug('%sstarting a thread to handle: %s', self._logPrefix, triggerSignal)
                     thread = threading.Thread(target=target, name=triggerSignal)
                     thread.start()
                     self._threads[triggerSignal] = thread
@@ -216,16 +248,45 @@ class PLCPickWorkerSimulator:
                 return
             loop.run_until_complete(self._backend.ResetError())
         except Exception as e:
-            log.exception('resetError thread error: %s', e)
+            log.exception('%sresetError thread error: %s', self._logPrefix, e)
 
         finally:
-            log.debug('resetError thread stopping')
+            log.debug('%sresetError thread stopping', self._logPrefix)
+            controller.SetMultiple({
+                'isError': False,
+                'errorcode': 0,
+                'detailcode': '',
+            })
+            controller.WaitUntil('resetError', False)
             controller.SetMultiple({
                 'isError': False,
                 'errorcode': 0,
                 'detailcode': '',
             })
             self._threads['resetError'] = None
+            loop.close()
+
+    def _RunClearStateThread(self) -> None:
+        loop = asyncio.new_event_loop()
+        controller = plccontroller.PLCController(self._memory)
+        try:
+            if not controller.SyncAndGetBoolean('clearState'):
+                # trigger no longer alive
+                return
+            loop.run_until_complete(self._backend.ClearState())
+        except Exception as e:
+            log.exception('%sclearState thread error: %s', self._logPrefix, e)
+
+        finally:
+            log.debug('%sclearState thread stopping', self._logPrefix)
+            controller.SetMultiple({
+                'clearStatePerformed': True,
+            })
+            controller.WaitUntil('clearState', False)
+            controller.SetMultiple({
+                'clearStatePerformed': False,
+            })
+            self._threads['clearState'] = None
             loop.close()
 
     def _RunOrderCycleThread(self) -> None:
@@ -262,10 +323,8 @@ class PLCPickWorkerSimulator:
             # run backend code
             status = loop.run_until_complete(self._backend.RunOrderCycleAsync(order))
 
-            controller.WaitUntil('startOrderCycle', False)
-
         except PLCError as e:
-            log.exception('orderCycle plc error: %s', e)
+            log.exception('%sorderCycle plc error: %s', self._logPrefix, e)
             status.orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedGenericFailure
             controller.SetMultiple({
                 'isError': True,
@@ -275,11 +334,12 @@ class PLCPickWorkerSimulator:
             })
 
         except Exception as e:
-            log.exception('orderCycle thread error: %s', e)
+            log.exception('%sorderCycle thread error: %s', self._logPrefix, e)
             status.orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedGenericFailure
 
         finally:
-            log.debug('orderCycle thread stopping')
+            log.debug('%sorderCycle thread stopping', self._logPrefix)
+            controller.WaitUntil('startOrderCycle', False)
             controller.SetMultiple({
                 'numLeftInOrder': status.numLeftInOrder,
                 'numPutInDestination': status.numPutInDestination,
@@ -322,10 +382,8 @@ class PLCPickWorkerSimulator:
             # run backend code
             status = loop.run_until_complete(self._backend.RunPreparationCycleAsync(order))
 
-            controller.WaitUntil('startOrderCycle', False)
-
         except PLCError as e:
-            log.exception('preparationCycle plc error: %s', e)
+            log.exception('%spreparationCycle plc error: %s', self._logPrefix, e)
             status.preparationFinishCode = PLCPreparationFinishCode.PreparationFinishedGenericError
             controller.SetMultiple({
                 'isError': True,
@@ -335,11 +393,12 @@ class PLCPickWorkerSimulator:
             })
 
         except Exception as e:
-            log.exception('preparationCycle thread error: %s', e)
+            log.exception('%spreparationCycle thread error: %s', self._logPrefix, e)
             status.preparationFinishCode = PLCPreparationFinishCode.PreparationFinishedGenericError
 
         finally:
-            log.debug('preparationCycle thread stopping')
+            log.debug('%spreparationCycle thread stopping', self._logPrefix)
+            controller.WaitUntil('startOrderCycle', False)
             controller.SetMultiple({
                 'orderCycleFinishCode': int(status.preparationFinishCode),
                 'isRunningPreparation': False,
