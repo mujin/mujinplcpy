@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # TODO:
-# - [ ] check isModeAuto
-# - [ ] check isSystemReady
-# - [ ] check isCycleReady
 # - [ ] handle isError
-# - [ ] stop productionCycle with error
 # - [ ] add state timeouts
 
 import threading
@@ -280,17 +276,17 @@ class PLCProductionCycle:
             allFinished = True
             if not self._IsOrderCycleState(PLCOrderCycleState.Stopped):
                 allFinished = False
-                # log.debug('%swaiting for order cycle to stop', self._logPrefix)
+                # log.warn('%swaiting for order cycle to stop', self._logPrefix)
             if not self._IsPreparationCycleState(PLCPreparationCycleState.Stopped):
                 allFinished = False
-                # log.debug('%swaiting for preparation cycle to stop', self._logPrefix)
+                # log.warn('%swaiting for preparation cycle to stop', self._logPrefix)
             for locationIndex in self._locationIndices:
                 if not self._IsLocationState(locationIndex, PLCLocationState.Stopped):
                     allFinished = False
-                    # log.debug('%swaiting for location%d to stop', self._logPrefix, locationIndex)
+                    # log.warn('%swaiting for location%d to stop', self._logPrefix, locationIndex)
             if not self._IsQueueOrderState(PLCQueueOrderState.Disabled):
                 allFinished = False
-                # log.debug('%swaiting for queue order to stop', self._logPrefix)
+                # log.warn('%swaiting for queue order to stop', self._logPrefix)
             if allFinished:
                 self._SetState(PLCProductionCycleState.Stopped, finishCode)
 
@@ -818,7 +814,7 @@ class PLCProductionCycle:
                 # add the order to queue
                 self._ordersQueue.append(order)
                 self._SetQueueOrderState(PLCQueueOrderState.Succeeded)
-                log.warn('%sorder queued on production cycle: %r', self._logPrefix, order)
+                log.info('%sorder queued on production cycle: %r', self._logPrefix, order)
 
         # succeeded queuing, need to set finish code
         if self._IsQueueOrderState(PLCQueueOrderState.Succeeded):

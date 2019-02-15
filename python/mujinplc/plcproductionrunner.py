@@ -207,7 +207,10 @@ class PLCProductionRunner:
         controller.SetMultiple(signalsToClear)
 
         try:
-            while self._isok:
+            while True:
+                if not self._isok:
+                    controller.Set('stopProductionCycle', True)
+
                 # always start production cycle
                 if controller.SyncAndGetBoolean('isRunningProductionCycle'):
                     controller.Set('startProductionCycle', False)
@@ -215,6 +218,8 @@ class PLCProductionRunner:
                 else:
                     if productionCycleStarted:
                         log.error('%sproduction cycle stopped', self._logPrefix)
+                        break
+                    if not self._isok:
                         break
                     controller.SetMultiple({
                         'productionCycleMaxLocationIndex': max(self._locationIndices),
@@ -257,11 +262,6 @@ class PLCProductionRunner:
         except Exception as e:
             log.exception('%scaught exception while running the monitor thread for production runner: %s', self._logPrefix, e)
         finally:
-            # stop the production cycle
-            controller.Set('stopProductionCycle', True)
-            for timeout in range(30):
-                if not controller.WaitUntil('isRunningProductionCycle', False, timeout=1.0):
-                    log.warn('%sfailed to stop production cycle within %d second', self._logPrefix, timeout + 1)
             controller.Set('stopProductionCycle', False)
 
     def _RunMoveLocationThread(self, locationIndex: int) -> None:

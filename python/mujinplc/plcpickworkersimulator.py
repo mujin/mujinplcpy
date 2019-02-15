@@ -61,9 +61,13 @@ class PLCPickWorkerBackend:
             isPrepared = True
             self._preparedOrder = None
 
-        log.warn('%srunning order cycle: %r, isPrepared = %r', self._logPrefix, order, isPrepared)
+        if isPrepared:
+            log.warn('%srunning prepared order cycle: %r', self._logPrefix, order)
+        else:
+            log.error('%srunning unprepared order cycle: %r', self._logPrefix, order)
+
         while True:
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.1)
             controller.Sync()
             if controller.GetBoolean('stopOrderCycle'):
                 raise Exception('Interrupted')
@@ -85,14 +89,14 @@ class PLCPickWorkerBackend:
             for timeout in range(5):
                 if controller.SyncAndGetBoolean('stopOrderCycle'):
                     raise Exception('Interrupted')
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.1)
 
         controller.Set('isRobotMoving', True)
         for numPutInDestination in range(1, order.orderNumber + 1):
-            for timeout in range(3):
+            for timeout in range(5):
                 if controller.SyncAndGetBoolean('stopOrderCycle'):
                     raise Exception('Interrupted')
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.1)
             controller.SetMultiple({
                 'numPutInDestination': numPutInDestination,
                 'numLeftInOrder': order.orderNumber - numPutInDestination,
@@ -115,7 +119,7 @@ class PLCPickWorkerBackend:
 
         log.warn('%srunning preparation: %r', self._logPrefix, order)
         while True:
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.1)
             controller.Sync()
             if controller.GetBoolean('stopPreparation'):
                 raise Exception('Interrupted')
@@ -134,10 +138,10 @@ class PLCPickWorkerBackend:
             break
         log.info('%scontainers in position for preparation', self._logPrefix)
 
-        for timeout in range(4):
+        for timeout in range(5):
             if controller.SyncAndGetBoolean('stopPreparation'):
                 raise Exception('Interrupted')
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.1)
 
         self._preparedOrder = order
         return PLCPreparationCycleStatus(
