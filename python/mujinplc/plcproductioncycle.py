@@ -27,6 +27,8 @@ class PLCOrder(PLCDataObject):
     partSizeX = 0 # type: int
     partSizeY = 0 # type: int
     partSizeZ = 0 # type: int
+    partWeight = 0 # type: int
+    partPackingId = 0 # type: int
 
     orderNumber = 0 # type: int # number of items to be picked, for example: 1
 
@@ -362,6 +364,8 @@ class PLCProductionCycle:
                 'orderPartSizeX': order.partSizeX,
                 'orderPartSizeY': order.partSizeY,
                 'orderPartSizeZ': order.partSizeZ,
+                'orderPartWeight': order.partWeight,
+                'orderPartPackingId': order.partPackingId,
 
                 'orderNumber': order.orderNumber,
                 'orderRobotName': order.robotName,
@@ -542,6 +546,8 @@ class PLCProductionCycle:
                 'preparationPartSizeX': order.partSizeX,
                 'preparationPartSizeY': order.partSizeY,
                 'preparationPartSizeZ': order.partSizeZ,
+                'preparationPartWeight': order.partWeight,
+                'preparationPartPackingId': order.partPackingId,
 
                 'preparationOrderNumber': order.orderNumber,
                 'preparationRobotName': order.robotName,
@@ -744,6 +750,8 @@ class PLCProductionCycle:
                     partSizeX = controller.GetInteger('queueOrderPartSizeX'),
                     partSizeY = controller.GetInteger('queueOrderPartSizeY'),
                     partSizeZ = controller.GetInteger('queueOrderPartSizeZ'),
+                    partWeight = controller.GetInteger('queueOrderPartWeight'),
+                    partPackingId = controller.GetInteger('queueOrderPartPackingId'),
 
                     orderNumber = controller.GetInteger('queueOrderNumber'),
 

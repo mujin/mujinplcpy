@@ -50,6 +50,8 @@ class PLCQueueOrderParameters(PLCDataObject):
     partSizeX = 0 # type: int
     partSizeY = 0 # type: int
     partSizeZ = 0 # type: int
+    partWeight = 0 # type: int
+    partPackingId = 0 # type: int
 
     orderNumber = 0 # type: int # number of items to be picked, for example: 1
 
@@ -163,6 +165,8 @@ class PLCProductionRunner:
             'queueOrderPartSizeX': queueOrderParameters.partSizeX,
             'queueOrderPartSizeY': queueOrderParameters.partSizeY,
             'queueOrderPartSizeZ': queueOrderParameters.partSizeZ,
+            'queueOrderPartWeight': queueOrderParameters.partWeight,
+            'queueOrderPartPackingId': queueOrderParameters.partPackingId,
             'queueOrderNumber': queueOrderParameters.orderNumber,
             'queueOrderRobotName': queueOrderParameters.robotName,
             'queueOrderPickLocationIndex': queueOrderParameters.pickLocationIndex,
