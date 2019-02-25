@@ -19,7 +19,7 @@ class PLCMaterialHandler:
     _moveLocation = None
     _finishOrder = None
 
-    def __init__(self, moveLocation, finishOrder):
+    def __init__(self, moveLocation=None, finishOrder=None):
         self._moveLocation = moveLocation
         self._finishOrder = finishOrder
 
