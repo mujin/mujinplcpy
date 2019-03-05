@@ -56,11 +56,18 @@ class PLCUDPServer:
     _port = None # type: int # listening port to bind to
     _thread = None # type: typing.Optional[threading.Thread] # server thread
     _isok = False # type: bool # signal that the server thread should continue to run
+    _lock = None # type: threading.Lock # protects _modifications
+    _modifications = None # type: typing.Dict[str, plcmemory.PLCMemory.ValueType] # accumulatd changes to notify remote
 
     def __init__(self, memory: plcmemory.PLCMemory, port: int):
         self._memory = memory
         self._port = port
         self._isok = False
+        self._lock = threading.Lock()
+        self._modifications = {}
+
+        # observe memory so we can send notifications
+        memory.AddObserver(self)
 
     def __del__(self):
         self.Stop()
@@ -93,15 +100,37 @@ class PLCUDPServer:
             self._thread.join()
             self._thread = None
 
+    def _GetTimestamp(self) -> int:
+        return int(time.monotonic() * 1e9)
+
     def _RunThread(self) -> None:
         socket = None # zmq socket for use in this thread
+        notificationSocket = None # zmq socket for use in this thread
+        address = None # remote address
 
         while self._isok:
             try:
                 if socket is None:
                     socket = PLCUDPServerSocket(self._port)
 
-                if not socket.Poll(timeout=50):
+                if notificationSocket is None:
+                    notificationSocket = PLCUDPServerSocket(self._port + 1)
+
+                # dequeue notification
+                modifications = None
+                with self._lock:
+                    if self._modifications:
+                        modifications = self._modifications
+                        self._modifications = {}
+
+                # send notification
+                if modifications and address:
+                    notificationSocket.Send({
+                        'timestamp': self._GetTimestamp(),
+                        'changevalues': modifications,
+                    }, (address[0], address[1] + 1))
+
+                if not socket.Poll(timeout=2):
                     continue
 
                 response = {}
@@ -109,7 +138,7 @@ class PLCUDPServer:
 
                 try:
                     response['seqid'] = request['seqid']
-                    response['timestamp'] = int(time.monotonic() * 1e9)
+                    response['timestamp'] = self._GetTimestamp()
                     if 'writevalues' in request:
                         self._memory.Write(request['writevalues'])
                     if 'read' in request:
@@ -125,9 +154,21 @@ class PLCUDPServer:
                     socket.Destroy()
                     socket = None
 
+                if notificationSocket is not None:
+                    notificationSocket.Destroy()
+                    notificationSocket = None
+
                 # sleep a little bit when exception happens
                 time.sleep(0.2)
 
         if socket is not None:
             socket.Destroy()
             socket = None
+
+        if notificationSocket is not None:
+            notificationSocket.Destroy()
+            notificationSocket = None
+
+    def MemoryModified(self, modifications: typing.Mapping[str, plcmemory.PLCMemory.ValueType]) -> None:
+        with self._lock:
+            self._modifications.update(modifications)
