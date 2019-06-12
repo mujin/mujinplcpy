@@ -1,6 +1,6 @@
 # UDP-based PLC communication
 
-This specification document describes a UDP-based PLC communication protocol to be used with MUJIN controllers. See [plcudpserver.py](mujinplcpy/python/mujinplc/plcudpserver.py) for reference implementation.
+This specification document describes a UDP-based PLC communication protocol to be used with MUJIN controllers. See [plcudpserver.py](python/mujinplc/plcudpserver.py) for reference implementation.
 
 ## Overview
 
