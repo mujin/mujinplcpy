@@ -72,7 +72,7 @@ For example,
 ```json
 {
     "command": "write",
-    "writevalues": {
+    "keyvalues": {
         "signal3": "value3",
         "signal4": "value4"
     }
