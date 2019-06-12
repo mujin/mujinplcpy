@@ -5,24 +5,26 @@ This specification document describes a ZeroMQ-based PLC communication protocol 
 ## Overview
 
 - This netowrk protocol is built on top of ZeroMQ REQ-REP sockets.
+- MUJIN controller will send a request, and user PLC will reply to the request.
+- Two types of requests are used, `read` and `write`, for reading signal values from user PLC and writing signal values to user PLC.
 
-## Sockets
+## Socket
 
-Communication on REQ-REP sockets are bi-directional. MUJIN controller will create a `ZMQ_REQ` socket to connect to client PLC. Client PLC should listen on a `ZMQ_REP` socket, typically on TCP port 5555.
+Communication on REQ-REP socket is bi-directional. MUJIN controller will create a `ZMQ_REQ` socket to connect to client PLC. Client PLC should listen on a `ZMQ_REP` socket, typically on TCP port `5555`.
 
 The format of the ZeroMQ message has to be JSON, and the root element has to be a JSON dictionary.
 
-## Read
+## `read`
 
-Read operation is for MUJIN controller to read signal values on user PLC.
+`read` operation is for MUJIN controller to read signal values on user PLC.
 
-### Read request
+### `read` request
 
-A typical read request sent from MUJIN controller to user PLC will contain:
+A typical `read` request sent from MUJIN controller to user PLC will contain:
 
 | Field | Type | Description |
 | - | - | - |
-| `command` | string | (required) must be set to "read" |
+| `command` | string | (required) must be set to `"read"` |
 | `keys` | list of strings | (required) List of signals to read from user PLC |
 
 For example,
@@ -34,9 +36,9 @@ For example,
 }
 ```
 
-### Read reply
+### `read` reply
 
-A typical reply for read request sent from user PLC to MUJIN controller will contain:
+A typical reply for `read` request sent from user PLC to MUJIN controller will contain:
 
 | Field | Type | Description |
 | - | - | - |
@@ -52,17 +54,17 @@ For example,
 }
 ```
 
-## Write
+## `write`
 
-Write operation is for MUJIN controller to write signal values on user PLC.
+`write` operation is for MUJIN controller to write signal values on user PLC.
 
-### Write request
+### `write` request
 
-A typical write request sent from MUJIN controller to user PLC will contain:
+A typical `write` request sent from MUJIN controller to user PLC will contain:
 
 | Field | Type | Description |
 | - | - | - |
-| `command` | string | (required) must be set to "write" |
+| `command` | string | (required) must be set to `"write"` |
 | `keyvalues` | dictionary with string keys | (required) Mapping of signals and corresponding values to be written to user PLC |
 
 For example,
@@ -77,9 +79,9 @@ For example,
 }
 ```
 
-### Write reply
+### `write` reply
 
-A typical reply for write request sent from user PLC to MUJIN controller will contain no field. For example,
+A typical reply for `write` request sent from user PLC to MUJIN controller will contain no field. For example,
 
 ```json
 {

@@ -12,7 +12,7 @@ This specification document describes a UDP-based PLC communication protocol to 
 
 Communication for request-reply port is bi-directional. MUJIN controller will send request to PLC, and PLC will send response to MUJIN controller for each request.
 
-UDP port number is 5555 by default for this port. UDP packet content has to be in JSON format, and the root element has to be a JSON dictionary.
+UDP port number is `5555` by default for this port. UDP packet content has to be in JSON format, and the root element has to be a JSON dictionary.
 
 ### Request from MUJIN controller
 
@@ -66,7 +66,7 @@ For example,
 
 Notification port communication is uni-directional. Notifications are sent from user PLC to MUJIN controller. Notifications should be sent as soon as signals on user PLC changes.
 
-UDP port number is request-reply UDP port number plus one, therefore 5556 by default. UDP packet content has to be in JSON format, and the root element has to be a JSON dictionary.
+UDP port number is request-reply UDP port number plus one, therefore `5556` by default. UDP packet content has to be in JSON format, and the root element has to be a JSON dictionary.
 
 A typical notification UDP packet sent from user PLC to MUJIN controller will contain:
 
