@@ -1,6 +1,6 @@
 # ZeroMQ-based PLC communication
 
-This specification document describes a ZeroMQ-based PLC communication protocol to be used with MUJIN controllers.
+This specification document describes a ZeroMQ-based PLC communication protocol to be used with MUJIN controllers. See [plczmqserver.py](mujinplcpy/python/mujinplc/plczmqserver.py) for reference implementation.
 
 ## Overview
 
