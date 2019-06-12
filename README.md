@@ -4,6 +4,14 @@ This is an open-source library that provides simulated PLC server for MUJIN Cont
 
 [![Build Status](https://travis-ci.org/mujin/mujinplcpy.svg?branch=master)](https://travis-ci.org/mujin/mujinplcpy)
 
+## Network protocols
+
+Please refer to the following protocol specification documents:
+
+- [ZeroMQ-based PLC communication](ZMQ.md)
+- [UDP-based PLC communication](UDP.md)
+
+
 ## Dependencies
 
 ```
