@@ -432,7 +432,7 @@ class PLCProductionCycle:
             })
             if controller.GetBoolean('isRunningFinishOrder'):
                 self._SetOrderCycleState(PLCOrderCycleState.Finishing, order)
-
+        
         if self._IsOrderCycleState(PLCOrderCycleState.Finishing):
             controller.Set('startFinishOrder', False)
 
