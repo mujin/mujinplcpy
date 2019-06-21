@@ -874,6 +874,16 @@ class PLCProductionCycle:
             if order is currentOrder:
                 continue
 
+            # do not prepare for the exact same order, which confuses pickworker
+            if currentOrder and \
+                order.pickLocationIndex == currentOrder.pickLocationIndex and \
+                order.pickContainerId == currentOrder.pickContainerId and \
+                order.pickContainerType == currentOrder.pickContainerType and \
+                order.placeLocationIndex == currentOrder.placeLocationIndex and \
+                order.placeContainerId == currentOrder.placeContainerId and \
+                order.placeContainerType == currentOrder.placeContainerType:
+                continue
+
             # need to make sure that the container is going to be next on the locations
             nextContainerAtPickLocation = None
             queue = self._locationsQueue[order.pickLocationIndex]
