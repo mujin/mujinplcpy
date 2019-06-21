@@ -119,14 +119,12 @@ def ConfigureLogging(logLevel=logging.DEBUG, outputStream=sys.stderr):
     root.addHandler(handler)
 
 if __name__ == '__main__':
-    ConfigureLogging(logging.INFO)
+    ConfigureLogging()
 
     # have one plc memory per MUJIN controller
     memory = plcmemory.PLCMemory()
     logger = plcmemory.PLCMemoryLogger(memory)
 
-    from IPython.terminal import embed; ipshell=embed.InteractiveShellEmbed(config=embed.load_default_config())(local_ns=locals())
-    
     # production cycle is a standalone server process monitoring the memory
     productionCycle = None
     if True:
@@ -150,7 +148,7 @@ if __name__ == '__main__':
 
     example.WaitUntilConnected()
     log.warn('connected.')
-    
+
     example.QueueOrders()
 
     # pause until we want to stop
