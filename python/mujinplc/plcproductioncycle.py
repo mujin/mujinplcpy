@@ -432,7 +432,7 @@ class PLCProductionCycle:
             })
             if controller.GetBoolean('isRunningFinishOrder'):
                 self._SetOrderCycleState(PLCOrderCycleState.Finishing, order)
-        
+
         if self._IsOrderCycleState(PLCOrderCycleState.Finishing):
             controller.Set('startFinishOrder', False)
 
@@ -875,14 +875,21 @@ class PLCProductionCycle:
                 continue
 
             # do not prepare for the exact same order, which confuses pickworker
-            if currentOrder and \
-                order.pickLocationIndex == currentOrder.pickLocationIndex and \
-                order.pickContainerId == currentOrder.pickContainerId and \
-                order.pickContainerType == currentOrder.pickContainerType and \
-                order.placeLocationIndex == currentOrder.placeLocationIndex and \
-                order.placeContainerId == currentOrder.placeContainerId and \
-                order.placeContainerType == currentOrder.placeContainerType:
-                continue
+            if currentOrder:
+                sameOrder = True
+                for key in (
+                    'pickLocationIndex',
+                    'pickContainerId',
+                    'pickContainerType',
+                    'placeLocationIndex',
+                    'placeContainerId',
+                    'placeContainerType',
+                ):
+                    if getattr(order, key) != getattr(currentOrder, key):
+                        sameOrder = False
+                        break
+                if sameOrder:
+                    continue
 
             # need to make sure that the container is going to be next on the locations
             nextContainerAtPickLocation = None

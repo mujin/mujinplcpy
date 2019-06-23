@@ -3,9 +3,8 @@
 
 import sys
 import typing # noqa: F401 # used in type check
-import asyncio
 
-from mujinplc import plcmemory, plczmqserver, plccontroller, plclogic, plcproductionrunner, plcproductioncycle, plcpickworkersimulator
+from mujinplc import plcmemory, plczmqserver
 
 import logging
 log = logging.getLogger(__name__)
@@ -43,4 +42,4 @@ if __name__ == '__main__':
     server.Start()
     log.warn('server started.')
 
-    from IPython.terminal import embed; ipshell=embed.InteractiveShellEmbed(config=embed.load_default_config())(local_ns=locals())
+    from IPython.terminal import embed; embed.InteractiveShellEmbed(config=embed.load_default_config())(local_ns=locals()) # noqa
