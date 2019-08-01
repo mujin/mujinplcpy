@@ -81,7 +81,7 @@ class PLCError(Exception):
     _errorCode = None # type: PLCErrorCode
     _errorDetail = None # type: str
 
-    def __init__(self, errorCode: PLCErrorCode = PLCErrorCode.GenericError, errorDetail: str = ''):
+    def __init__(self, errorCode: PLCErrorCode = PLCErrorCode.FinishedGenericError, errorDetail: str = ''):
         self._errorCode = errorCode
         self._errorDetail = errorDetail
 
