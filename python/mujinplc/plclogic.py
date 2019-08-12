@@ -17,48 +17,31 @@ class PLCErrorCode(enum.IntEnum):
     MUJIN PLC ErrorCode
     """
 
-    ErrorCodeNotAvailable = 0x0000
-    FinishedNoMoreTargets = 0x0002
-    FinishedNoMoreTargetsNotEmpty = 0x0003
-    FinishedNoMoreDest = 0x0004
-    FinishedNoEnvironmentUpdate = 0x0005
-    FinishedDropTargetFailure = 0x0006
-    FinishedTooManyPickFailure = 0x0007
-    FinishedRobotExecutionError = 0x0008
-    FinishedNoDestObstacles = 0x0009
-    FinishedStopDueToTorqueLimit = 0x000a
-    FinishedGripperExecutionError = 0x000b
-    FinishedCannotRecoverWhileGrabbingTarget = 0x000c
-    FinishedCycleStopped = 0x0101
-    FinishedImmediatelyStopped = 0x0102
-    FinishedInterlockWithLocation = 0x0103
+    ErrorCodeNotAvailable = 0x0
     EStopError = 0x1000
-    FinishedNoValidGrasp = 0x1001
-    FinishedNoValidDest = 0x1002
-    FinishedNoValidGraspDestPair = 0x1003
-    FinishedNoValidPath = 0x1004
-    FinishedNoValidTargets = 0x1005
-    FinishedNoValidBarcodeScan = 0x1006
-    FinishedComputePlanFailure = 0x1007
-    FinishedCannotGenerateGraspingModel = 0x1008
     PLCError = 0x2000
-    PLCSupplyInterlockError = 0x2001
-    PLCDestInterlockError = 0x2002
-    PLCOtherInterlockError = 0x2003
+    PLCInterlockError = 0x2003
     PLCCommandError = 0x2010
+    PLCCommCounterError = 0x2011
     PlanningError = 0x3000
     DetectionError = 0x4000
     SensorError = 0x5000
     RobotError = 0x6000
     SystemError = 0x7000
     NoVisionUpdateError = 0x7001
+    PackFormationComputationError = 0x8000
+    PackFormationTimeoutError = 0x8001
+    InPackFormationComputationError = 0x8002
     OtherCycleError = 0xf000
     InCycleError = 0xf001
     GrabbingError = 0xf002
-    InvalidOrderNumberError = 0xf003
-    NotRunningError = 0xf004
+    BeforeCycleStartError = 0xf003
+    PlanningTimeoutError = 0xf004
+    StatusPickPlaceError = 0xf005
     FailedToMoveToError = 0xf009
+    FailedInProductionCycle = 0xf00a
     GenericError = 0xffff
+
 
 class PLCError(Exception):
     """
@@ -110,10 +93,18 @@ class PLCOrderCycleFinishCode(enum.IntEnum):
     FinishedStopDueToTorqueLimit = 0x000a
     FinishedGripperExecutionError = 0x000b
     FinishedCannotRecoverWhileGrabbingTarget = 0x000c
-    FinishedStopped = 0x0101
-    FinishedStoppedImmediately = 0x0102
+    FinishedCannotRecoverWhileIntermediateCycles = 0x000d
+    FinishedCannotRecover = 0x000e
+    FinishedBadIOConditions = 0x000f
+    FinishedGripperPositionNotReached = 0x0010
+    FinishedCycleStopped = 0x0101
+    FinishedImmediatelyStopped = 0x0102
     FinishedInterlockWithLocation = 0x0103
-    FinishedPlanningFailure = 0x1000
+    FinishedEStopped = 0x0104
+    FinishedExecutionStopped = 0x0105
+    FinishedUnexpectedCancelCommand = 0x0106
+    FinishedImmediatelyStoppedByUI = 0x0107
+    FinishedPlanningError = 0x1000
     FinishedNoValidGrasp = 0x1001
     FinishedNoValidDest = 0x1002
     FinishedNoValidGraspDestPair = 0x1003
@@ -122,14 +113,18 @@ class PLCOrderCycleFinishCode(enum.IntEnum):
     FinishedNoValidBarcodeScan = 0x1006
     FinishedComputePlanFailure = 0x1007
     FinishedCannotGenerateGraspingModel = 0x1008
+    FinishedNotifySlaveTimeout = 0x1009
     FinishedContainerNotDetected = 0x2001
     FinishedPlaceContainerNotDetected = 0x2002
     FinishedBadExpectedDetectionHeight = 0x2003
     FinishedUnexpectedMeasuredTargetSize = 0x2004
+    FinishedUnexpectedMeasuredTargetMassProperties = 0x2005
     FinishedInvalidOrderNumber = 0x3000
     FinishedInvalidPickContainerType = 0x3001
     FinishedInvalidPlaceContainerType = 0x3002
     FinishedInvalidOrderNumPartBarcodes = 0x3003
+    FinishedResponseExecutorError = 0xfff5
+    FinishedExecutorError = 0xfff6
     FinishedCannotComputeFinishPlan = 0xfff7
     FinishedUnknownReasonNoError = 0xfff8
     FinishedCannotGetState = 0xfff9
@@ -137,7 +132,8 @@ class PLCOrderCycleFinishCode(enum.IntEnum):
     FinishedDropOffIsOn = 0xfffb
     FinishedBadPartType = 0xfffd
     FinishedBadOrderCyclePrecondition = 0xfffe
-    FinishedGenericFailure = 0xffff
+    FinishedGenericError = 0xffff
+
 
 class PLCPreparationFinishCode(enum.IntEnum):
     PreparationNotAvailable = 0x0000

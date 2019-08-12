@@ -329,7 +329,7 @@ class PLCPickWorkerSimulator:
 
         except PLCError as e:
             log.exception('%sorderCycle plc error: %s', self._logPrefix, e)
-            status.orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedGenericFailure
+            status.orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedGenericError
             controller.SetMultiple({
                 'isError': True,
                 'errorcode': int(e.GetErrorCode()),
@@ -339,7 +339,7 @@ class PLCPickWorkerSimulator:
 
         except Exception as e:
             log.exception('%sorderCycle thread error: %s', self._logPrefix, e)
-            status.orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedGenericFailure
+            status.orderCycleFinishCode = PLCOrderCycleFinishCode.FinishedGenericError
 
         finally:
             log.debug('%sorderCycle thread stopping', self._logPrefix)
