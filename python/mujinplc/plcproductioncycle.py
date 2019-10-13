@@ -646,6 +646,13 @@ class PLCProductionCycle:
                 expectedContainer = queue[0] if len(queue) > 0 else None
 
                 # if the next container has only one order then it may be released early
+
+                # HACK - Disable early release due to it is incompatible with latest controller image
+                # Where '*' is considered mismatch with legit containerId and result in occlusion
+
+                # Info for pickContainerReleased and placeContainerReleased is still kept
+                # So in the future this can be easily reverted
+                """
                 if expectedContainer and len(expectedContainer.orders) == 1:
                     order = expectedContainer.orders[0]
                     # if the last order using this container has released the pick container or place container
@@ -657,6 +664,7 @@ class PLCProductionCycle:
                         released = True
                     if released:
                         expectedContainer = queue[1] if len(queue) > 1 else None
+                """
 
                 request = PLCLocationRequest(
                     expectedContainerId = '*',
@@ -668,7 +676,6 @@ class PLCProductionCycle:
                         expectedContainerType = expectedContainer.containerType,
                         orderUniqueId = expectedContainer.orders[0].uniqueId
                     )
-
                 if request.expectedContainerId != controller.GetString('location%dContainerId' % locationIndex) or \
                    request.expectedContainerType != controller.GetString('location%dContainerType' % locationIndex):
                     self._SetLocationState(locationIndex, PLCLocationState.Move, request)
