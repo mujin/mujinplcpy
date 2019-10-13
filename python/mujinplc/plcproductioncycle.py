@@ -327,9 +327,11 @@ class PLCProductionCycle:
             if not self._IsState(PLCProductionCycleState.Running):
                 self._SetOrderCycleState(PLCOrderCycleState.Stopping)
             elif not controller.GetBoolean('isModeAuto') or not controller.GetBoolean('isSystemReady') or not controller.GetBoolean('isCycleReady'):
+                log.debug("system not ready: isModeAuto: {0}, isSystemReady: {1}. isCycleReady: {2}".format(controller.GetBoolean('isModeAuto'), controller.GetBoolean('isSystemReady'), controller.GetBoolean('isCycleReady')))
                 # need to wait until starting condition is met
                 pass
             elif self._IsPreparationCycleState(PLCPreparationCycleState.Resetting, PLCPreparationCycleState.Starting, PLCPreparationCycleState.Running):
+                log.debug('preparation is running')
                 # if preparation is running, need to wait for it to finish
                 pass
             else:
