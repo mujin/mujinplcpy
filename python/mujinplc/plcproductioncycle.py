@@ -178,7 +178,7 @@ class PLCProductionCycle:
 
             self._RunStateMachine(controller)
             self._RunOrderCycleStateMachine(controller)
-            self._RunPreparationCycleStateMachine(controller)
+            # self._RunPreparationCycleStateMachine(controller)
             self._RunQueueOrderStateMachine(controller)
             for locationIndex in self._locationIndices:
                 self._RunLocationStateMachine(controller, locationIndex)
